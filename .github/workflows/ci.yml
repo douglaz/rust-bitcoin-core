@@ -167,27 +167,27 @@ jobs:
           name: bitcoin-node-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/${{ matrix.binary }}
 
-  # Test coverage
-  coverage:
-    name: Code Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
-      
-      - name: Generate coverage
-        run: cargo tarpaulin --out Xml --all --lib --verbose
-      
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./cobertura.xml
-          fail_ci_if_error: false
+  # Test coverage - temporarily disabled (slow)
+  # coverage:
+  #   name: Code Coverage
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     
+  #     - name: Install Rust
+  #       uses: dtolnay/rust-toolchain@stable
+  #     
+  #     - name: Install tarpaulin
+  #       run: cargo install cargo-tarpaulin
+  #     
+  #     - name: Generate coverage
+  #       run: cargo tarpaulin --out Xml --all --lib --verbose
+  #     
+  #     - name: Upload coverage to Codecov
+  #       uses: codecov/codecov-action@v3
+  #       with:
+  #         file: ./cobertura.xml
+  #         fail_ci_if_error: false
 
   # Documentation
   docs:
