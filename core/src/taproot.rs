@@ -514,10 +514,10 @@ impl TaprootValidator {
 
         // Compute Taproot signature hash
         // Note: annex is currently not used in key spend, but would be needed for script spend
-        if annex.is_some() {
+        if let Some(annex_data) = annex {
             trace!(
                 "Annex data provided ({} bytes) for sighash computation",
-                annex.unwrap().len()
+                annex_data.len()
             );
         }
 
