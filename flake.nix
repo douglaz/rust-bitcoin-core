@@ -232,9 +232,6 @@
             echo "  Default: x86_64-unknown-linux-musl (static)"
             echo ""
             
-            # Add static libusb to the shell
-            export RUSTFLAGS="-C target-feature=+crt-static"
-            
             # Set up pre-commit hooks if .githooks exists
             if [ -d .git ] && [ -d .githooks ]; then
               current_hooks_path=$(git config core.hooksPath || echo "")

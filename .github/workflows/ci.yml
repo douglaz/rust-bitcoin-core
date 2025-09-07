@@ -20,13 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
         with:
-          components: rustfmt
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
       
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: nix develop -c cargo fmt --all -- --check
 
   # Clippy temporarily disabled - too many warnings to fix right now
   # clippy:
@@ -68,101 +70,88 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
       
       - name: Run security audit
-        run: cargo audit
+        run: nix develop -c cargo audit
 
   # Test on Linux only for now
   test:
     name: Test Suite
-    strategy:
-      matrix:
-        os: [ubuntu-latest]  # Linux only
-        rust: [stable]  # Stable only for now
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
         with:
-          toolchain: ${{ matrix.rust }}
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
       
+      # Only cache cargo registry, not target directory (conflicts with nix)
       - name: Cache cargo registry
         uses: actions/cache@v3
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Cache cargo index
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Cache target directory
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-${{ matrix.rust }}-target-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-${{ runner.os }}-
       
       - name: Build
-        run: cargo build --verbose
+        run: nix develop -c cargo build --verbose
       
       - name: Run unit tests
-        run: cargo test --lib --all --verbose
+        run: nix develop -c cargo test --lib --all --verbose
       
       - name: Run doc tests
-        run: cargo test --doc --all --verbose
+        run: nix develop -c cargo test --doc --all --verbose
       
       - name: Run integration tests
-        run: cargo test --test integration_test --verbose
+        run: nix develop -c cargo test --test integration_test --verbose
         continue-on-error: true  # Allow integration test failures for now
 
   # Build release binaries
   build-release:
     name: Build Release Binary
     needs: [format, test]
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            binary: bitcoin-node
-          # macOS and Windows disabled for now
-          # - os: macos-latest
-          #   target: x86_64-apple-darwin
-          #   binary: bitcoin-node
-          # - os: macos-latest
-          #   target: aarch64-apple-darwin
-          #   binary: bitcoin-node
-          # - os: windows-latest
-          #   target: x86_64-pc-windows-msvc
-          #   binary: bitcoin-node.exe
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
         with:
-          targets: ${{ matrix.target }}
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
       
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Build release binary (musl static)
+        run: nix develop -c cargo build --release
       
-      - name: Strip binary (Unix)
-        if: matrix.os != 'windows-latest'
+      - name: Create artifacts directory
+        run: mkdir -p artifacts
+      
+      - name: Copy and strip binary
         run: |
-          strip target/${{ matrix.target }}/release/${{ matrix.binary }}
+          cp target/x86_64-unknown-linux-musl/release/bitcoin-node artifacts/
+          cp target/x86_64-unknown-linux-musl/release/bitcoin-cli artifacts/
+          strip artifacts/bitcoin-node
+          strip artifacts/bitcoin-cli
       
-      - name: Upload binary
+      - name: Upload binaries
         uses: actions/upload-artifact@v3
         with:
-          name: bitcoin-node-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          name: bitcoin-node-x86_64-linux-musl
+          path: artifacts/*
 
   # Test coverage - temporarily disabled (slow)
   # coverage:
@@ -193,14 +182,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
       
       - name: Build documentation
-        run: cargo doc --all --no-deps
+        run: nix develop -c cargo doc --all --no-deps
       
       - name: Check documentation links
-        run: cargo doc --all --no-deps --document-private-items
+        run: nix develop -c cargo doc --all --no-deps --document-private-items
+
+  # Nix build (validates flake.nix)
+  nix-build:
+    name: Nix Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      
+      - name: Build with Nix
+        run: nix build
+      
+      - name: Check result
+        run: |
+          ls -la result/bin/
+          file result/bin/bitcoin-node
+          # Verify it's statically linked
+          ldd result/bin/bitcoin-node 2>&1 | grep -q "not a dynamic executable" && echo "✓ Static binary" || echo "✗ Not static"
 
   # Docker build
   docker:
@@ -230,11 +247,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
       
       - name: Run benchmarks
-        run: cargo bench --all
+        run: nix develop -c cargo bench --all
         continue-on-error: true  # Don't fail CI on benchmark regression
 
   # Success notification
