@@ -276,9 +276,32 @@ fn verify_p2wsh_witness(
     trace!("P2WSH validation for tx input {} with value {} sats, sighash: {}",
           input_index, value.to_sat(), sighash);
 
-    // For full validation, we would execute the witness script here
-    // with the witness stack items. For now, return true if hash matches
-    // and basic validation passes.
+    // Prepare witness stack (all items except the last one which is the script)
+    let mut witness_stack = Vec::new();
+    for i in 0..witness.len() - 1 {
+        witness_stack.push(witness[i].to_vec());
+    }
+
+    // Execute the witness script with the witness stack
+    let mut interpreter = crate::script_interpreter::ScriptInterpreter::new(
+        crate::script_interpreter::ScriptFlags::default()
+    );
+    
+    let result = interpreter.execute_witness_script(
+        &witness_stack,
+        &witness_script.as_script(),
+        tx,
+        input_index,
+        value,
+        sighash.as_byte_array(),
+    )?;
+    
+    if !result {
+        trace!("P2WSH witness script execution failed");
+        return Ok(false);
+    }
+    
+    trace!("P2WSH witness script execution succeeded");
     Ok(true)
 }
 
@@ -387,6 +410,8 @@ mod tests {
     fn test_p2wsh_witness_verification() -> Result<()> {
         use bitcoin::hashes::Hash;
         use bitcoin::TxIn;
+        use bitcoin::blockdata::opcodes::all::OP_PUSHNUM_1;
+        use bitcoin::blockdata::opcodes::all::OP_EQUAL;
         
         // Create a test transaction
         let tx = Transaction {
@@ -404,40 +429,90 @@ mod tests {
             }],
         };
 
-        // Create a witness script
-        let witness_script = ScriptBuf::from_bytes(vec![0x51]); // OP_1
-        let script_hash = bitcoin::hashes::sha256::Hash::hash(witness_script.as_bytes());
-        
-        // Create P2WSH script pubkey
-        let script_pubkey = ScriptBuf::new_p2wsh(&bitcoin::WScriptHash::from_byte_array(
-            script_hash.to_byte_array()
-        ));
+        // Test 1: Simple OP_TRUE script (OP_TRUE = 0x51 = OP_PUSHNUM_1)
+        {
+            let witness_script = ScriptBuf::from_bytes(vec![0x51]); // OP_TRUE/OP_1
+            let script_hash = bitcoin::hashes::sha256::Hash::hash(witness_script.as_bytes());
+            
+            let script_pubkey = ScriptBuf::new_p2wsh(&bitcoin::WScriptHash::from_byte_array(
+                script_hash.to_byte_array()
+            ));
 
-        // Create witness with the script
-        let witness = bitcoin::Witness::from_slice(&[witness_script.as_bytes()]);
+            // Witness only contains the script (no other stack items needed for OP_TRUE)
+            let witness = bitcoin::Witness::from_slice(&[witness_script.as_bytes()]);
+            
+            let result = verify_p2wsh_witness(
+                &tx,
+                0,
+                &script_pubkey,
+                Amount::from_sat(1000),
+                &witness,
+            )?;
+            
+            assert!(result, "P2WSH with OP_TRUE script should succeed");
+        }
+
+        // Test 2: Script requiring a value on stack (OP_1 OP_EQUAL)
+        {
+            let witness_script = ScriptBuf::from_bytes(vec![
+                OP_PUSHNUM_1.to_u8(), 
+                OP_EQUAL.to_u8()
+            ]);
+            let script_hash = bitcoin::hashes::sha256::Hash::hash(witness_script.as_bytes());
+            
+            let script_pubkey = ScriptBuf::new_p2wsh(&bitcoin::WScriptHash::from_byte_array(
+                script_hash.to_byte_array()
+            ));
+
+            // Witness contains: value "1", then the script
+            let mut witness_data = vec![];
+            witness_data.push(vec![1u8]);  // Push value 1 onto stack
+            witness_data.push(witness_script.as_bytes().to_vec());
+            let witness = bitcoin::Witness::from_slice(&witness_data);
+            
+            let result = verify_p2wsh_witness(
+                &tx,
+                0,
+                &script_pubkey,
+                Amount::from_sat(1000),
+                &witness,
+            )?;
+            
+            assert!(result, "P2WSH with OP_1 OP_EQUAL should succeed with correct value");
+        }
         
-        // Verify witness
-        let result = verify_p2wsh_witness(
-            &tx,
-            0,
-            &script_pubkey,
-            Amount::from_sat(1000),
-            &witness,
-        )?;
-        
-        assert!(result, "P2WSH witness verification should succeed");
-        
-        // Test with invalid script hash
-        let wrong_script = ScriptBuf::new_p2wsh(&bitcoin::WScriptHash::all_zeros());
-        let result = verify_p2wsh_witness(
-            &tx,
-            0,
-            &wrong_script,
-            Amount::from_sat(1000),
-            &witness,
-        )?;
-        
-        assert!(!result, "P2WSH witness verification should fail with wrong script hash");
+        // Test 3: Invalid script hash
+        {
+            let witness_script = ScriptBuf::from_bytes(vec![0x51]); // OP_TRUE
+            let wrong_script = ScriptBuf::new_p2wsh(&bitcoin::WScriptHash::all_zeros());
+            let witness = bitcoin::Witness::from_slice(&[witness_script.as_bytes()]);
+            
+            let result = verify_p2wsh_witness(
+                &tx,
+                0,
+                &wrong_script,
+                Amount::from_sat(1000),
+                &witness,
+            )?;
+            
+            assert!(!result, "P2WSH should fail with wrong script hash");
+        }
+
+        // Test 4: Empty witness should fail
+        {
+            let script_pubkey = ScriptBuf::new_p2wsh(&bitcoin::WScriptHash::all_zeros());
+            let witness = bitcoin::Witness::new();
+            
+            let result = verify_p2wsh_witness(
+                &tx,
+                0,
+                &script_pubkey,
+                Amount::from_sat(1000),
+                &witness,
+            );
+            
+            assert!(result.is_err(), "P2WSH should fail with empty witness");
+        }
         
         Ok(())
     }

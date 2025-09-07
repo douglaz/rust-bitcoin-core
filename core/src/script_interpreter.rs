@@ -101,6 +101,48 @@ impl ScriptInterpreter {
         self.stack.push_back(data);
     }
 
+    /// Execute witness script with pre-populated stack
+    /// Used for P2WSH validation where witness items form the initial stack
+    pub fn execute_witness_script(
+        &mut self,
+        witness_stack: &[Vec<u8>],
+        witness_script: &Script,
+        tx: &Transaction,
+        input_index: usize,
+        amount: bitcoin::Amount,
+        sighash: &[u8; 32],
+    ) -> Result<bool> {
+        // Clear stacks
+        self.stack.clear();
+        self.alt_stack.clear();
+        self.exec_stack.clear();
+        self.op_count = 0;
+
+        // Pre-populate stack with witness items (excluding the script itself)
+        for item in witness_stack {
+            self.stack.push_back(item.clone());
+        }
+
+        // Execute the witness script
+        if !self.execute_script(witness_script, tx, input_index, amount, true)? {
+            return Ok(false);
+        }
+
+        // Check if stack evaluation is true
+        if !self.is_stack_true() {
+            trace!("Witness script execution failed: stack not true");
+            return Ok(false);
+        }
+
+        // For clean stack flag, ensure only one element remains
+        if self.flags.verify_cleanstack && self.stack.len() != 1 {
+            trace!("Witness script execution failed: stack not clean (len={})", self.stack.len());
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
     /// Verify script execution
     pub fn verify_script(
         &mut self,
