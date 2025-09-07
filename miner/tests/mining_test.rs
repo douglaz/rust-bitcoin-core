@@ -39,7 +39,8 @@ async fn test_enhanced_mining() {
 
     assert_eq!(template.height, height);
     assert_eq!(template.previous_block_hash, chain_tip);
-    assert!(template.transactions.len() >= 0);
+    // Transaction count should be at least 1 (coinbase)
+    assert!(!template.transactions.is_empty());
 
     // Mining with current implementation has timeout issues
     // We'll just verify template creation works
