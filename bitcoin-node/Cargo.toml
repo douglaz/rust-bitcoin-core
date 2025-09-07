@@ -1,0 +1,75 @@
+[package]
+name = "bitcoin-node"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Internal crates
+bitcoin-core-lib = { path = "../core" }
+network = { path = "../network" }
+storage = { path = "../storage" }
+mempool = { path = "../mempool" }
+rpc = { path = "../rpc" }
+wallet = { path = "../wallet" }
+miner = { path = "../miner" }
+
+# Bitcoin
+bitcoin = { workspace = true }
+bitcoin_hashes = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Configuration
+config = { workspace = true }
+dotenvy = { workspace = true }
+
+# Logging and monitoring
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
+prometheus = "0.14"
+warp = "0.3"
+procfs = "0.16"
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+
+# Utilities
+once_cell = { workspace = true }
+parking_lot = { workspace = true }
+chrono = { workspace = true }
+rand = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = "0.8"
+hex = { workspace = true }
+
+# Database
+sled = { workspace = true }
+
+# Signal handling
+tokio-signal = "0.2"
+ctrlc = "3.4"
+
+[dev-dependencies]
+mockall = { workspace = true }
+proptest = { workspace = true }
+jsonrpsee = { workspace = true }
+tempfile = "3.8"
+reqwest = { version = "0.11", default-features = false, features = ["json", "blocking", "rustls-tls"] }
+
+[features]
+integration-test = []

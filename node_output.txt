@@ -1,0 +1,5 @@
+error: unexpected argument '--regtest' found
+
+Usage: bitcoin-node [OPTIONS]
+
+For more information, try '--help'.

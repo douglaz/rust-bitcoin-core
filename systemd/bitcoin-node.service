@@ -1,0 +1,53 @@
+[Unit]
+Description=Rust Bitcoin Core Node
+Documentation=https://github.com/yourusername/rust-bitcoin-core
+After=network.target
+
+[Service]
+Type=simple
+User=bitcoin
+Group=bitcoin
+
+# Service configuration
+ExecStart=/usr/local/bin/bitcoin-node \
+    --datadir=/var/lib/bitcoin \
+    --network=mainnet \
+    --rpc-bind=127.0.0.1:8332 \
+    --p2p-bind=0.0.0.0:8333
+
+ExecStop=/bin/kill -TERM $MAINPID
+
+# Process management
+Restart=on-failure
+RestartSec=30s
+TimeoutStopSec=60s
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/bitcoin
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=4G
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bitcoin-node
+
+[Install]
+WantedBy=multi-user.target

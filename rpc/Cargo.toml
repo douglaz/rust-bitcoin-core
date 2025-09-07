@@ -1,0 +1,47 @@
+[package]
+name = "rpc"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Internal
+bitcoin-core-lib = { path = "../core" }
+mempool = { path = "../mempool" }
+miner = { path = "../miner" }
+network = { path = "../network" }
+storage = { path = "../storage" }
+wallet = { path = "../wallet" }
+
+# Bitcoin
+bitcoin = { workspace = true }
+
+# RPC
+jsonrpsee = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+hyper = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Utilities
+dirs = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }

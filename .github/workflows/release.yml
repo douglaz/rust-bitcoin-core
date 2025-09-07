@@ -1,0 +1,285 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0-rc1)'
+        required: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body_path: RELEASE_NOTES.md
+          draft: true
+          prerelease: ${{ contains(steps.get_version.outputs.version, 'rc') }}
+
+  build-release:
+    name: Build Release Binaries
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+          # Linux x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: bitcoin-node
+            archive: bitcoin-node-linux-x64.tar.gz
+          
+          # Linux ARM64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary: bitcoin-node
+            archive: bitcoin-node-linux-arm64.tar.gz
+            use_cross: true
+          
+          # macOS x64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: bitcoin-node
+            archive: bitcoin-node-macos-x64.tar.gz
+          
+          # macOS ARM64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary: bitcoin-node
+            archive: bitcoin-node-macos-arm64.tar.gz
+          
+          # Windows x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: bitcoin-node.exe
+            archive: bitcoin-node-windows-x64.zip
+    
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Install cross
+        if: matrix.use_cross == true
+        run: cargo install cross
+      
+      - name: Build release binary
+        run: |
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+        shell: bash
+      
+      - name: Strip binary (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          strip target/${{ matrix.target }}/release/${{ matrix.binary }}
+      
+      - name: Create archive (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../${{ matrix.archive }} ${{ matrix.binary }}
+          cd -
+          echo "ARCHIVE=${{ matrix.archive }}" >> $GITHUB_ENV
+      
+      - name: Create archive (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path target/${{ matrix.target }}/release/${{ matrix.binary }} -DestinationPath ${{ matrix.archive }}
+          echo "ARCHIVE=${{ matrix.archive }}" >> $env:GITHUB_ENV
+      
+      - name: Generate SHA256 checksum
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            certutil -hashfile ${{ matrix.archive }} SHA256 > ${{ matrix.archive }}.sha256
+          else
+            shasum -a 256 ${{ matrix.archive }} > ${{ matrix.archive }}.sha256
+          fi
+      
+      - name: Upload Release Archive
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ matrix.archive }}
+          asset_name: ${{ matrix.archive }}
+          asset_content_type: application/gzip
+      
+      - name: Upload Checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ${{ matrix.archive }}.sha256
+          asset_name: ${{ matrix.archive }}.sha256
+          asset_content_type: text/plain
+
+  docker-release:
+    name: Build and Push Docker Image
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: bitcoincore/rust-node
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  create-checksums:
+    name: Create Release Checksums
+    needs: [create-release, build-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+      
+      - name: Generate master checksum file
+        run: |
+          find . -name "*.tar.gz" -o -name "*.zip" | while read file; do
+            sha256sum "$file" >> SHA256SUMS
+          done
+      
+      - name: Sign checksums with GPG
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --import
+          gpg --armor --detach-sign SHA256SUMS
+        continue-on-error: true
+      
+      - name: Upload checksums
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: SHA256SUMS
+          asset_name: SHA256SUMS
+          asset_content_type: text/plain
+      
+      - name: Upload signature
+        uses: actions/upload-release-asset@v1
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: SHA256SUMS.asc
+          asset_name: SHA256SUMS.asc
+          asset_content_type: text/plain
+        continue-on-error: true
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: [create-release, build-release]
+    runs-on: ubuntu-latest
+    if: ${{ !contains(needs.create-release.outputs.version, 'rc') }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Login to crates.io
+        run: cargo login ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      
+      - name: Publish crates in order
+        run: |
+          # Publish in dependency order
+          cargo publish -p bitcoin-core-lib --allow-dirty
+          sleep 30
+          cargo publish -p storage --allow-dirty
+          sleep 30
+          cargo publish -p network --allow-dirty
+          sleep 30
+          cargo publish -p mempool --allow-dirty
+          sleep 30
+          cargo publish -p wallet --allow-dirty
+          sleep 30
+          cargo publish -p miner --allow-dirty
+          sleep 30
+          cargo publish -p rpc --allow-dirty
+          sleep 30
+          cargo publish -p bitcoin-node --allow-dirty
+        continue-on-error: true
+
+  finalize-release:
+    name: Finalize Release
+    needs: [create-release, build-release, docker-release, create-checksums]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        run: |
+          echo "All release artifacts have been uploaded."
+          echo "Please review and publish the release manually."

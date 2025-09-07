@@ -1,0 +1,38 @@
+# Rust build artifacts
+/target/
+**/target/
+Cargo.lock
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Data directories
+/data/
+**/data/
+*.db
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Backup files
+*.bak
+*.backup
+
+# Test artifacts
+*.profraw
+*.profdata
+
+# Nix
+result
+result-*

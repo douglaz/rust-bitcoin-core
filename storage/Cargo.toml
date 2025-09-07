@@ -1,0 +1,46 @@
+[package]
+name = "storage"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Bitcoin
+bitcoin = { workspace = true }
+bitcoin_hashes = { workspace = true }
+
+# Database
+sled = { workspace = true }
+
+# Compression
+flate2 = { workspace = true }
+snap = { workspace = true }
+sha2 = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Utilities
+parking_lot = { workspace = true }
+lru = { workspace = true }
+bytes = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"
+mockall = { workspace = true }

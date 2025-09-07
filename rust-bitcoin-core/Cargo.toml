@@ -1,0 +1,37 @@
+[package]
+name = "rust-bitcoin-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitcoin-node = { path = "../bitcoin-node" }
+bitcoin-cli = { path = "../bitcoin-cli" }
+bitcoin-core-lib = { path = "../core", package = "core" }
+network = { path = "../network" }
+storage = { path = "../storage" }
+mempool = { path = "../mempool" }
+miner = { path = "../miner" }
+wallet = { path = "../wallet" }
+rpc = { path = "../rpc" }
+
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+criterion = { workspace = true }
+rand = { workspace = true }
+
+[[bench]]
+name = "performance_bench"
+harness = false
+
+[lib]
+name = "rust_bitcoin_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bitcoin-node"
+path = "src/main.rs"
