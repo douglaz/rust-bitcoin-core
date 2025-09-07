@@ -568,7 +568,7 @@ impl ScriptInterpreter {
         }
 
         // Get public keys
-        let mut pubkeys = Vec::new();
+        let mut pubkeys = Vec::with_capacity(n);
         for _ in 0..n {
             if self.stack.is_empty() {
                 bail!("Stack too small for CHECKMULTISIG pubkeys");
@@ -583,7 +583,7 @@ impl ScriptInterpreter {
         }
 
         // Get signatures
-        let mut sigs = Vec::new();
+        let mut sigs = Vec::with_capacity(m);
         for _ in 0..m {
             if self.stack.is_empty() {
                 bail!("Stack too small for CHECKMULTISIG signatures");

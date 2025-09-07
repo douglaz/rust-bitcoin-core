@@ -110,7 +110,7 @@ impl WitnessValidator {
 
     /// Calculate witness merkle root for all transactions
     fn calculate_witness_merkle_root(block: &Block) -> Result<sha256d::Hash> {
-        let mut hashes = Vec::new();
+        let mut hashes = Vec::with_capacity(block.txdata.len());
 
         // First hash is always 0x00...00 for coinbase witness
         hashes.push(sha256d::Hash::all_zeros());
@@ -359,7 +359,7 @@ impl WitnessValidator {
 
         // Execute witness script with witness stack
         // Create a stack from witness items (excluding the witness script itself)
-        let mut stack = Vec::new();
+        let mut stack = Vec::with_capacity(witness.len().saturating_sub(1));
         for i in 0..witness.len() - 1 {
             stack.push(witness[i].to_vec());
         }

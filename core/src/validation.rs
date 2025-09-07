@@ -394,7 +394,7 @@ impl BlockValidator {
         }
 
         // Check legacy block size (1MB limit for backwards compatibility)
-        let mut size = Vec::new();
+        let mut size = Vec::with_capacity(1_000_000);
         block.consensus_encode(&mut size)?;
         if size.len() > 1_000_000 {
             return Ok(Err(format!(
