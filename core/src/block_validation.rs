@@ -320,6 +320,19 @@ impl BlockValidationRules {
             self.validate_coinbase_height(script_bytes, height)?;
         }
 
+        // Validate coinbase outputs don't already exist in UTXO set
+        // (This should never happen as coinbase tx hash includes the block hash)
+        let coinbase_txid = coinbase.compute_txid();
+        for (index, _output) in coinbase.output.iter().enumerate() {
+            let outpoint = bitcoin::OutPoint {
+                txid: coinbase_txid,
+                vout: index as u32,
+            };
+            if utxo_set.contains_key(&outpoint) {
+                bail!("Coinbase output already exists in UTXO set: {:?}", outpoint);
+            }
+        }
+
         // Calculate total fees from the block
         let total_fees = Amount::ZERO;
         // Note: Would calculate actual fees from transactions here
@@ -427,6 +440,33 @@ impl BlockValidationRules {
         let tx_size = bitcoin::consensus::encode::serialize(tx).len();
         if tx_size > 1_000_000 {
             bail!("Transaction size {} exceeds maximum", tx_size);
+        }
+
+        // Validate all inputs exist in UTXO set and calculate total input value
+        let mut total_input = 0u64;
+        for input in &tx.input {
+            let prevout = &input.previous_output;
+            
+            // Check if the UTXO exists
+            match utxo_set.get(prevout) {
+                Some(prev_tx_out) => {
+                    total_input = total_input.saturating_add(prev_tx_out.value.to_sat());
+                }
+                None => {
+                    bail!(
+                        "Transaction input references non-existent UTXO: {}:{}",
+                        prevout.txid, prevout.vout
+                    );
+                }
+            }
+        }
+
+        // Verify that inputs are greater than or equal to outputs (fees)
+        if total_input < total_output {
+            bail!(
+                "Transaction outputs ({} sats) exceed inputs ({} sats)",
+                total_output, total_input
+            );
         }
 
         Ok(())

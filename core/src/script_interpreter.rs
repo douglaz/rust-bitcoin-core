@@ -96,6 +96,11 @@ impl ScriptInterpreter {
         }
     }
 
+    /// Push data to the stack
+    pub fn push_to_stack(&mut self, data: Vec<u8>) {
+        self.stack.push_back(data);
+    }
+
     /// Verify script execution
     pub fn verify_script(
         &mut self,
@@ -383,13 +388,13 @@ impl ScriptInterpreter {
             }
 
             // Locktime operations
-            OP_CHECKLOCKTIMEVERIFY => {
+            OP_CLTV => {
                 if !self.flags.verify_checklocktimeverify {
                     return Ok(()); // Treat as NOP
                 }
                 self.execute_checklocktimeverify(tx)?;
             }
-            OP_CHECKSEQUENCEVERIFY => {
+            OP_CSV => {
                 if !self.flags.verify_checksequenceverify {
                     return Ok(()); // Treat as NOP
                 }

@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use bitcoin::{block::Header as BlockHeader, CompactTarget, Target, Work};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 /// Difficulty adjustment interval (2016 blocks)
 const DIFFICULTY_ADJUSTMENT_INTERVAL: u32 = 2016;
@@ -170,10 +170,17 @@ impl DifficultyCalculator {
         let old_work = old_target.to_work();
         let new_work = new_target.to_work();
 
-        // Check if work is effectively zero (simplified check)
-        if new_work.to_be_bytes() == [0u8; 32] {
+        // Check if either work is effectively zero (simplified check)
+        if new_work.to_be_bytes() == [0u8; 32] || old_work.to_be_bytes() == [0u8; 32] {
             return 0.0;
         }
+
+        // Log the work change for debugging and monitoring
+        trace!(
+            "Work change: old={:?}, new={:?}",
+            old_work.to_be_bytes()[..8].to_vec(), // First 8 bytes for brevity
+            new_work.to_be_bytes()[..8].to_vec()
+        );
 
         // Simplified calculation for display
         let old_bits = old_target.to_compact_lossy().to_consensus();
