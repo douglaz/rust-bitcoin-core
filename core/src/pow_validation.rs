@@ -2,8 +2,9 @@ use anyhow::{bail, Result};
 use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::Params;
 use bitcoin::{Block, BlockHash, Network, Target, Work};
+use num_bigint::BigUint;
 use std::collections::HashMap;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 /// Proof of Work validator
 pub struct PowValidator {
@@ -317,15 +318,111 @@ pub fn calculate_next_work_required(
     // This is simplified - proper implementation would use big integer arithmetic
     let old_compact = last_block_header.bits;
 
-    // For now, return the old target
-    // Proper implementation would calculate: old_target * adjusted_timespan / TARGET_TIMESPAN
-    old_target
+    // Log difficulty adjustment calculation
+    info!(
+        "Difficulty adjustment: actual_timespan={}, adjusted_timespan={}, old_bits={:#x}",
+        actual_timespan, adjusted_timespan, old_compact
+    );
+
+    // Calculate new target: new_target = old_target * adjusted_timespan / TARGET_TIMESPAN
+    // Using BigUint for precise 256-bit arithmetic
+
+    // Convert old target to BigUint (256-bit big-endian)
+    let old_target_bytes = old_target.to_be_bytes();
+    let old_target_bigint = BigUint::from_bytes_be(&old_target_bytes);
+
+    // Perform the calculation: (old_target * adjusted_timespan) / TARGET_TIMESPAN
+    let adjusted_timespan_bigint = BigUint::from(adjusted_timespan);
+    let target_timespan_bigint = BigUint::from(TARGET_TIMESPAN);
+
+    let new_target_bigint =
+        (&old_target_bigint * &adjusted_timespan_bigint) / &target_timespan_bigint;
+
+    // Ensure the result fits in 256 bits
+    let max_target = BigUint::from(1u32) << 256;
+    let new_target_clamped = if new_target_bigint >= max_target {
+        max_target - BigUint::from(1u32)
+    } else {
+        new_target_bigint
+    };
+
+    // Convert back to 32-byte array for Target
+    let new_target_bytes_vec = new_target_clamped.to_bytes_be();
+    let mut new_target_bytes = [0u8; 32];
+
+    // Pad with zeros if necessary (for smaller targets)
+    let offset = 32_usize.saturating_sub(new_target_bytes_vec.len());
+    new_target_bytes[offset..].copy_from_slice(&new_target_bytes_vec);
+
+    // Create the new Target
+    let new_target = Target::from_be_bytes(new_target_bytes);
+
+    // Log the adjustment
+    if adjusted_timespan != TARGET_TIMESPAN {
+        let adjustment_ratio = (adjusted_timespan as f64) / (TARGET_TIMESPAN as f64);
+        info!(
+            "Difficulty adjustment by factor {:.4} ({}/{})",
+            adjustment_ratio, adjusted_timespan, TARGET_TIMESPAN
+        );
+
+        debug!(
+            "Old target: {:064x}, New target: {:064x}",
+            old_target_bigint, new_target_clamped
+        );
+    }
+
+    new_target
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use bitcoin::hashes::Hash;
+
+    #[test]
+    fn test_work_calculation_and_adjustment() {
+        // Test that adjusted_timespan and old_compact are properly used
+        let first_header = BlockHeader {
+            version: bitcoin::blockdata::block::Version::from_consensus(1),
+            prev_blockhash: BlockHash::all_zeros(),
+            merkle_root: bitcoin::TxMerkleNode::all_zeros(),
+            time: 1000000,
+            bits: bitcoin::CompactTarget::from_consensus(0x1d00ffff),
+            nonce: 0,
+        };
+
+        let last_header = BlockHeader {
+            version: bitcoin::blockdata::block::Version::from_consensus(1),
+            prev_blockhash: BlockHash::all_zeros(),
+            merkle_root: bitcoin::TxMerkleNode::all_zeros(),
+            time: 1000000 + (14 * 24 * 60 * 60) + 3600, // 2 weeks + 1 hour
+            bits: bitcoin::CompactTarget::from_consensus(0x1d00ffff),
+            nonce: 0,
+        };
+
+        let params = Params::new(Network::Bitcoin);
+
+        // This should calculate adjusted timespan and use it
+        let new_target = calculate_next_work_required(&last_header, &first_header, &params);
+
+        // The target should be adjusted based on the timespan ratio
+        // Since we took 2 weeks + 1 hour instead of exactly 2 weeks,
+        // the target should be slightly easier (higher value)
+        let old_target = last_header.target();
+
+        // Verify that the target was actually adjusted
+        assert_ne!(
+            new_target, old_target,
+            "Target should be adjusted based on timespan"
+        );
+
+        // Since we took more time than expected (2 weeks + 1 hour),
+        // the new target should be easier (higher value)
+        assert!(
+            new_target > old_target,
+            "Target should be easier (higher) when blocks took longer than expected"
+        );
+    }
 
     #[test]
     fn test_pow_validation() {

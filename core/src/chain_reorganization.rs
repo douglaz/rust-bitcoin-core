@@ -76,6 +76,15 @@ pub struct ReorgResult {
 
     /// Total work difference
     pub work_difference: i64,
+
+    /// Total number of transactions affected by the reorg
+    pub txs_affected: u64,
+
+    /// Total number of UTXOs restored during disconnection
+    pub utxos_restored: u64,
+
+    /// Total number of UTXOs removed during reconnection
+    pub utxos_removed: u64,
 }
 
 /// Statistics about reorganizations
@@ -416,6 +425,16 @@ impl ChainReorganizer {
         // Calculate work difference (simplified)
         let work_difference = (new_height as i64) - (old_height as i64);
 
+        // Log reorganization metrics
+        info!(
+            "Reorganization complete: {} blocks disconnected, {} connected, {} txs affected, {} UTXOs restored, {} UTXOs removed",
+            disconnected.len(),
+            connected.len(),
+            txs_affected,
+            utxos_restored,
+            utxos_removed
+        );
+
         Ok(ReorgResult {
             disconnected_blocks: disconnected,
             connected_blocks: connected,
@@ -426,6 +445,9 @@ impl ChainReorganizer {
             fork_point,
             fork_height,
             work_difference,
+            txs_affected,
+            utxos_restored,
+            utxos_removed,
         })
     }
 
