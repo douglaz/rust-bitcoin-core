@@ -386,6 +386,7 @@ mod tests {
     #[test]
     fn test_p2wsh_witness_verification() -> Result<()> {
         use bitcoin::hashes::Hash;
+        use bitcoin::TxIn;
         
         // Create a test transaction
         let tx = Transaction {
