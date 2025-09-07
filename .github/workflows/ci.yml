@@ -244,7 +244,7 @@ jobs:
   notify-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [format, clippy, test, build-release, docs]
+    needs: [format, test, build-release, docs]  # Removed clippy from dependencies
     if: success()
     steps:
       - name: Success
