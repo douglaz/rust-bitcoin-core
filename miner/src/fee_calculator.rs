@@ -71,7 +71,7 @@ impl MiningFeeCalculator {
 
         // Check cache first
         let cache = self.utxo_cache.read().await;
-        let mut missing_outpoints = Vec::new();
+        let mut missing_outpoints = Vec::with_capacity(tx.input.len());
 
         for input in &tx.input {
             if let Some(utxo) = cache.get(&input.previous_output) {
