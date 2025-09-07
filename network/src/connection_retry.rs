@@ -77,14 +77,18 @@ impl RetryState {
         let base_delay = if self.consecutive_failures == 0 {
             config.initial_delay
         } else {
-            let multiplier = config.multiplier.powi(self.consecutive_failures.min(10) as i32);
+            let multiplier = config
+                .multiplier
+                .powi(self.consecutive_failures.min(10) as i32);
             let delay_ms = (config.initial_delay.as_millis() as f64 * multiplier) as u64;
             Duration::from_millis(delay_ms.min(config.max_delay.as_millis() as u64))
         };
 
         // Add jitter to prevent thundering herd
         let jitter = if config.jitter_factor > 0.0 {
-            let jitter_ms = (base_delay.as_millis() as f64 * config.jitter_factor * rand::random::<f64>()) as u64;
+            let jitter_ms = (base_delay.as_millis() as f64
+                * config.jitter_factor
+                * rand::random::<f64>()) as u64;
             Duration::from_millis(jitter_ms)
         } else {
             Duration::ZERO
@@ -111,11 +115,11 @@ impl RetryState {
                 self.consecutive_failures += 1;
                 self.total_failures += 1;
                 self.last_error = Some(err.clone());
-                
+
                 if self.consecutive_failures < config.max_retries {
                     self.current_delay = self.calculate_next_delay(config);
                     self.next_retry = Some(Instant::now() + self.current_delay);
-                    
+
                     warn!(
                         "Connection to {} failed: {}. Retry {} in {:?}",
                         self.peer_addr, err, self.consecutive_failures, self.current_delay
@@ -128,12 +132,12 @@ impl RetryState {
                     );
                 }
             }
-            ConnectionResult::Timeout |
-            ConnectionResult::Refused |
-            ConnectionResult::NetworkUnreachable => {
+            ConnectionResult::Timeout
+            | ConnectionResult::Refused
+            | ConnectionResult::NetworkUnreachable => {
                 self.consecutive_failures += 1;
                 self.total_failures += 1;
-                
+
                 let error_msg = match result {
                     ConnectionResult::Failed(err) => err,
                     ConnectionResult::Timeout => "Connection timeout".to_string(),
@@ -141,13 +145,13 @@ impl RetryState {
                     ConnectionResult::NetworkUnreachable => "Network unreachable".to_string(),
                     _ => unreachable!(),
                 };
-                
+
                 self.last_error = Some(error_msg.clone());
-                
+
                 if self.consecutive_failures < config.max_retries {
                     self.current_delay = self.calculate_next_delay(config);
                     self.next_retry = Some(Instant::now() + self.current_delay);
-                    
+
                     warn!(
                         "Connection to {} failed: {}. Retry {} in {:?}",
                         self.peer_addr, error_msg, self.consecutive_failures, self.current_delay
@@ -165,8 +169,7 @@ impl RetryState {
 
     /// Check if retry should be attempted
     pub fn should_retry(&self, config: &RetryConfig) -> bool {
-        self.consecutive_failures < config.max_retries &&
-        self.next_retry.is_some()
+        self.consecutive_failures < config.max_retries && self.next_retry.is_some()
     }
 
     /// Get time until next retry
@@ -199,19 +202,17 @@ impl ConnectionRetryManager {
     /// Get or create retry state for a peer
     pub async fn get_retry_state(&self, peer_addr: SocketAddr) -> RetryState {
         let mut states = self.retry_states.write().await;
-        states.entry(peer_addr)
+        states
+            .entry(peer_addr)
             .or_insert_with(|| RetryState::new(peer_addr))
             .clone()
     }
 
     /// Update retry state after connection attempt
-    pub async fn update_connection_result(
-        &self,
-        peer_addr: SocketAddr,
-        result: ConnectionResult,
-    ) {
+    pub async fn update_connection_result(&self, peer_addr: SocketAddr, result: ConnectionResult) {
         let mut states = self.retry_states.write().await;
-        let state = states.entry(peer_addr)
+        let state = states
+            .entry(peer_addr)
             .or_insert_with(|| RetryState::new(peer_addr));
         state.update(result, &self.config);
     }
@@ -219,14 +220,17 @@ impl ConnectionRetryManager {
     /// Wait for next retry if needed
     pub async fn wait_for_retry(&self, peer_addr: SocketAddr) -> Result<()> {
         let state = self.get_retry_state(peer_addr).await;
-        
+
         if !state.should_retry(&self.config) {
             bail!("Max retries exceeded for {}", peer_addr);
         }
 
         if let Some(delay) = state.time_until_retry() {
             if delay > Duration::ZERO {
-                debug!("Waiting {:?} before retrying connection to {}", delay, peer_addr);
+                debug!(
+                    "Waiting {:?} before retrying connection to {}",
+                    delay, peer_addr
+                );
                 sleep(delay).await;
             }
         }
@@ -238,8 +242,9 @@ impl ConnectionRetryManager {
     pub async fn get_peers_ready_for_retry(&self) -> Vec<SocketAddr> {
         let states = self.retry_states.read().await;
         let now = Instant::now();
-        
-        states.iter()
+
+        states
+            .iter()
             .filter_map(|(addr, state)| {
                 if state.should_retry(&self.config) {
                     if let Some(next_retry) = state.next_retry {
@@ -262,17 +267,11 @@ impl ConnectionRetryManager {
     /// Get statistics
     pub async fn get_stats(&self) -> ConnectionRetryStats {
         let states = self.retry_states.read().await;
-        
+
         let total_peers = states.len();
-        let peers_with_failures = states.values()
-            .filter(|s| s.total_failures > 0)
-            .count();
-        let peers_pending_retry = states.values()
-            .filter(|s| s.next_retry.is_some())
-            .count();
-        let total_failures: u32 = states.values()
-            .map(|s| s.total_failures)
-            .sum();
+        let peers_with_failures = states.values().filter(|s| s.total_failures > 0).count();
+        let peers_pending_retry = states.values().filter(|s| s.next_retry.is_some()).count();
+        let total_failures: u32 = states.values().map(|s| s.total_failures).sum();
 
         ConnectionRetryStats {
             total_peers,
@@ -327,17 +326,21 @@ mod tests {
         assert_eq!(state.consecutive_failures, 0);
 
         // Record failure
-        manager.update_connection_result(
-            peer_addr,
-            ConnectionResult::Failed("Test error".to_string())
-        ).await;
+        manager
+            .update_connection_result(
+                peer_addr,
+                ConnectionResult::Failed("Test error".to_string()),
+            )
+            .await;
 
         let state = manager.get_retry_state(peer_addr).await;
         assert_eq!(state.consecutive_failures, 1);
         assert!(state.next_retry.is_some());
 
         // Record success
-        manager.update_connection_result(peer_addr, ConnectionResult::Success).await;
+        manager
+            .update_connection_result(peer_addr, ConnectionResult::Success)
+            .await;
         let state = manager.get_retry_state(peer_addr).await;
         assert_eq!(state.consecutive_failures, 0);
         assert!(state.next_retry.is_none());

@@ -47,7 +47,11 @@ mod tests {
         };
 
         let temp_dir = TempDir::new().unwrap();
-        let storage = Arc::new(storage::OptimizedStorage::new(temp_dir.path()).await.unwrap());
+        let storage = Arc::new(
+            storage::OptimizedStorage::new(temp_dir.path())
+                .await
+                .unwrap(),
+        );
         let utxo_tracker = Arc::new(UtxoTracker::new(storage).await.unwrap());
         let mempool = MempoolAcceptance::new(config, utxo_tracker, 100);
 

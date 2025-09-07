@@ -140,7 +140,7 @@ impl Peer {
         // Wait for version and verack with timeout
         let handshake_timeout = Duration::from_secs(30);
         let start = Instant::now();
-        
+
         let mut received_version = false;
         let mut received_verack = false;
         let mut sent_verack = false;
@@ -151,17 +151,22 @@ impl Peer {
         // 3. We send verack
         // 4. Peer sends verack
         // 5. Connection established
-        
+
         while start.elapsed() < handshake_timeout {
             // Try to receive a message with short timeout
-            match tokio::time::timeout(Duration::from_millis(100), self.recv_message_internal()).await {
+            match tokio::time::timeout(Duration::from_millis(100), self.recv_message_internal())
+                .await
+            {
                 Ok(Ok(msg)) => {
                     match msg {
                         Message::Version(peer_version) => {
-                            debug!("Received version from {}: v{}", self.addr, peer_version.version);
+                            debug!(
+                                "Received version from {}: v{}",
+                                self.addr, peer_version.version
+                            );
                             *self.version.write().await = Some(peer_version);
                             received_version = true;
-                            
+
                             // Send verack in response to version
                             if !sent_verack {
                                 self.send_message(Message::Verack).await?;
@@ -177,13 +182,20 @@ impl Peer {
                             debug!("Unexpected message during handshake: {:?}", msg);
                         }
                     }
-                    
+
                     // Check if handshake is complete
                     if received_version && received_verack && sent_verack {
                         *self.state.write().await = PeerState::Connected;
-                        info!("Handshake complete with peer {} (v{})", 
-                              self.addr, 
-                              self.version.read().await.as_ref().map(|v| v.version).unwrap_or(0));
+                        info!(
+                            "Handshake complete with peer {} (v{})",
+                            self.addr,
+                            self.version
+                                .read()
+                                .await
+                                .as_ref()
+                                .map(|v| v.version)
+                                .unwrap_or(0)
+                        );
                         return Ok(());
                     }
                 }
@@ -198,14 +210,14 @@ impl Peer {
 
         anyhow::bail!("Handshake timeout with peer {}", self.addr)
     }
-    
+
     /// Internal method to receive a message (used during handshake)
     async fn recv_message_internal(&self) -> Result<Message> {
         // This is a placeholder - in reality we'd read from the message reader channel
         // For now, simulate receiving version and verack
         static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        
+
         if count == 0 {
             // Simulate receiving version
             Ok(Message::Version(self.create_version_message()))
@@ -422,7 +434,8 @@ impl Peer {
                 self.send_message(Message::SendCompact(crate::message::SendCompact {
                     version: crate::compact_blocks::COMPACT_BLOCK_VERSION,
                     high_bandwidth: true,
-                })).await?;
+                }))
+                .await?;
             }
             Message::Ping(nonce) => {
                 self.send_message(Message::Pong(nonce)).await?;

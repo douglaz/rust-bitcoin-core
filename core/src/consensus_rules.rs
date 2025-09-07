@@ -41,13 +41,14 @@ impl ConsensusRules {
             );
         }
 
-        let (bip34_height, bip65_height, bip66_height, segwit_height, taproot_height) = match network {
-            Network::Bitcoin => (227931, 388381, 363725, 481824, 709632),
-            Network::Testnet => (21111, 581885, 330776, 834624, 2104441),
-            Network::Signet => (0, 0, 0, 0, 0),
-            Network::Regtest => (0, 0, 0, 0, 0),
-            _ => (0, 0, 0, 0, 0),
-        };
+        let (bip34_height, bip65_height, bip66_height, segwit_height, taproot_height) =
+            match network {
+                Network::Bitcoin => (227931, 388381, 363725, 481824, 709632),
+                Network::Testnet => (21111, 581885, 330776, 834624, 2104441),
+                Network::Signet => (0, 0, 0, 0, 0),
+                Network::Regtest => (0, 0, 0, 0, 0),
+                _ => (0, 0, 0, 0, 0),
+            };
 
         Self {
             network,

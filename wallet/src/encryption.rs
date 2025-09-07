@@ -131,7 +131,10 @@ impl WalletEncryption {
         seed: &[u8],
         metadata: WalletMetadata,
     ) -> Result<Self> {
-        info!("Creating new encrypted wallet with provided seed at {:?}", wallet_path);
+        info!(
+            "Creating new encrypted wallet with provided seed at {:?}",
+            wallet_path
+        );
 
         // Generate salt for key derivation
         let salt = SaltString::generate(&mut OsRng);
@@ -168,7 +171,7 @@ impl WalletEncryption {
             is_locked: false,
         })
     }
-    
+
     /// Create new encrypted wallet with generated seed
     pub async fn create_new(
         wallet_path: PathBuf,

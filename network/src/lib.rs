@@ -33,11 +33,8 @@ pub use addr_manager::{AddrInfo, AddrManager, AddrStats};
 pub use ban_score::{
     BanDecision, BanScoreConfig, BanScoreManager, BanScoreStats, Misbehavior, PeerBanScore,
 };
-pub use bloom_filter::{BloomFilter, BloomFilterStats, BloomFlags, SPVFilterManager};
-pub use connection_retry::{
-    ConnectionResult, ConnectionRetryManager, ConnectionRetryStats, RetryConfig, RetryState,
-};
 pub use block_download::{BlockDownloadManager, DownloadRequest, DownloadStats, DownloadStatus};
+pub use bloom_filter::{BloomFilter, BloomFilterStats, BloomFlags, SPVFilterManager};
 pub use compact_block_protocol::{
     CompactBlockConfig, CompactBlockProtocol, CompactBlockState,
     ProtocolStats as CompactProtocolStats, SendCmpct,
@@ -47,6 +44,9 @@ pub use compact_blocks::{
     CompactBlockStats, GetBlockTxn, PrefilledTransaction, ShortTxId,
 };
 pub use connection::{Connection, ConnectionState};
+pub use connection_retry::{
+    ConnectionResult, ConnectionRetryManager, ConnectionRetryStats, RetryConfig, RetryState,
+};
 pub use discovery::{PeerAddress, PeerDiscovery};
 pub use dos_protection::{BanEntry, DosProtectionConfig, DosProtectionManager, DosProtectionStats};
 pub use headers_sync::{HeadersChain, HeadersStorage, HeadersSyncManager, HeadersSyncState};

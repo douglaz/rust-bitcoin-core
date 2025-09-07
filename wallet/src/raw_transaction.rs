@@ -41,12 +41,7 @@ impl RawTransactionBuilder {
     }
 
     /// Add an input by outpoint
-    pub fn add_input(
-        mut self,
-        txid: &str,
-        vout: u32,
-        sequence: Option<u32>,
-    ) -> WalletResult<Self> {
+    pub fn add_input(mut self, txid: &str, vout: u32, sequence: Option<u32>) -> WalletResult<Self> {
         let txid = Txid::from_str(txid)
             .map_err(|e| WalletError::Other(anyhow::anyhow!("Invalid txid: {}", e)))?;
 
@@ -109,11 +104,7 @@ impl RawTransactionBuilder {
     }
 
     /// Add an output with custom script
-    pub fn add_output_with_script(
-        mut self,
-        script_pubkey: ScriptBuf,
-        amount_sats: u64,
-    ) -> Self {
+    pub fn add_output_with_script(mut self, script_pubkey: ScriptBuf, amount_sats: u64) -> Self {
         self.outputs.push(TxOut {
             value: Amount::from_sat(amount_sats),
             script_pubkey,
@@ -221,7 +212,7 @@ impl RawTransactionBuilder {
 
 /// Create a transaction for sending from multiple inputs to multiple outputs
 pub fn create_multi_input_transaction(
-    inputs: Vec<(String, u32)>, // (txid, vout)
+    inputs: Vec<(String, u32)>,  // (txid, vout)
     outputs: Vec<(String, u64)>, // (address, amount_sats)
     network: Network,
 ) -> WalletResult<Transaction> {

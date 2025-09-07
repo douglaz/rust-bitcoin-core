@@ -121,8 +121,7 @@ impl RBFPolicy {
         let replacement_fee = self.calculate_fee(replacement_tx).await?;
         let replacement_size = serialize(replacement_tx).len();
         let replacement_vsize = self.calculate_vsize(replacement_tx);
-        let replacement_fee_rate =
-            (replacement_fee as f64 / replacement_vsize as f64) as u64;
+        let replacement_fee_rate = (replacement_fee as f64 / replacement_vsize as f64) as u64;
 
         let mut total_replaced_fee = 0u64;
         let mut total_replaced_size = 0usize;
@@ -187,7 +186,7 @@ impl RBFPolicy {
         } else {
             0
         };
-        
+
         if replacement_fee_rate <= replaced_fee_rate {
             bail!(
                 "BIP125 Rule #4: Replacement fee rate {} sat/vB must be higher than replaced rate {} sat/vB",
@@ -195,7 +194,7 @@ impl RBFPolicy {
                 replaced_fee_rate
             );
         }
-        
+
         // Additional check: Minimum relay fee rate
         if replacement_fee_rate < self.min_relay_fee_rate {
             bail!(
@@ -229,12 +228,12 @@ impl RBFPolicy {
         let weight = tx.weight().to_wu() as usize;
         (weight + 3) / 4
     }
-    
+
     /// Calculate total vsize of multiple transactions
     fn calculate_total_vsize(&self, txs: &[Transaction]) -> usize {
         txs.iter().map(|tx| self.calculate_vsize(tx)).sum()
     }
-    
+
     /// Calculate transaction fee by looking up actual UTXO values
     async fn calculate_fee(&self, tx: &Transaction) -> Result<u64> {
         let mut input_sum = 0u64;
@@ -274,7 +273,7 @@ impl RBFPolicy {
 
         Ok(input_sum.saturating_sub(output_sum))
     }
-    
+
     /// Simple validation method for tests
     pub fn validate_replacement(
         &self,
@@ -282,7 +281,7 @@ impl RBFPolicy {
         conflict_fees: &HashMap<Txid, bitcoin::Amount>,
     ) -> Result<()> {
         // BIP125 Rule 5: Check that we're not evicting too many transactions
-        // The total number of transactions being evicted (including descendants) 
+        // The total number of transactions being evicted (including descendants)
         // cannot exceed 100
         if candidate.conflicts.len() > 100 {
             bail!(
@@ -290,27 +289,24 @@ impl RBFPolicy {
                 candidate.conflicts.len()
             );
         }
-        
+
         // Calculate total fee being replaced
-        let total_replaced_fee: u64 = conflict_fees
-            .values()
-            .map(|amt| amt.to_sat())
-            .sum();
-        
+        let total_replaced_fee: u64 = conflict_fees.values().map(|amt| amt.to_sat()).sum();
+
         // Check minimum fee increment
         let replacement_fee = candidate.fee.to_sat();
         let required_fee = total_replaced_fee + self.min_replacement_fee_increment;
-        
+
         if replacement_fee < required_fee {
             bail!(
                 "Insufficient fee: {} < {} (original {} + increment {})",
                 replacement_fee,
-                required_fee, 
+                required_fee,
                 total_replaced_fee,
                 self.min_replacement_fee_increment
             );
         }
-        
+
         Ok(())
     }
 }

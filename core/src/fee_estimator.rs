@@ -75,7 +75,7 @@ impl FeeBucket {
         // Calculate the index for the requested percentile
         let percentile = percentile.clamp(0.0, 100.0);
         let index = ((percentile / 100.0) * (sorted.len() - 1) as f64).round() as usize;
-        
+
         Some(sorted[index])
     }
 }
@@ -112,7 +112,7 @@ pub struct FeeEstimatorConfig {
     pub default_buckets: Vec<u32>,
     pub decay_factor: f64,
     pub min_bucket_samples: usize,
-    pub default_percentile: f64,  // Default percentile for estimates
+    pub default_percentile: f64, // Default percentile for estimates
 }
 
 impl Default for FeeEstimatorConfig {
@@ -122,7 +122,7 @@ impl Default for FeeEstimatorConfig {
             default_buckets: vec![1, 2, 3, 6, 15, 25, 144, 1008], // Various confirmation targets
             decay_factor: 0.998,                                  // Slight decay for old data
             min_bucket_samples: 20,
-            default_percentile: 50.0,  // Use median by default
+            default_percentile: 50.0, // Use median by default
         }
     }
 }
@@ -239,11 +239,16 @@ impl FeeEstimator {
 
     /// Estimate fee for a given confirmation target
     pub async fn estimate_fee(&self, confirmation_target: u32) -> Result<FeeRate> {
-        self.estimate_fee_percentile(confirmation_target, self.config.default_percentile).await
+        self.estimate_fee_percentile(confirmation_target, self.config.default_percentile)
+            .await
     }
 
     /// Estimate fee for a given confirmation target at a specific percentile
-    pub async fn estimate_fee_percentile(&self, confirmation_target: u32, percentile: f64) -> Result<FeeRate> {
+    pub async fn estimate_fee_percentile(
+        &self,
+        confirmation_target: u32,
+        percentile: f64,
+    ) -> Result<FeeRate> {
         debug!(
             "Estimating fee for {} block confirmation target at {}th percentile",
             confirmation_target, percentile
@@ -265,8 +270,11 @@ impl FeeEstimator {
             if bucket.total_confirmed >= self.config.min_bucket_samples as u64 {
                 if let Some(fee_at_percentile) = bucket.percentile_fee_rate(percentile) {
                     let fee_rate = fee_at_percentile.max(self.min_relay_fee);
-                    debug!("Estimated fee rate: {} sat/vB ({}th percentile)", 
-                           fee_rate.as_sat_per_vb(), percentile);
+                    debug!(
+                        "Estimated fee rate: {} sat/vB ({}th percentile)",
+                        fee_rate.as_sat_per_vb(),
+                        percentile
+                    );
                     return Ok(fee_rate);
                 }
             }
@@ -281,11 +289,16 @@ impl FeeEstimator {
 
     /// Estimate fee based on recent blocks
     async fn estimate_from_recent_blocks(&self, confirmation_target: u32) -> Result<FeeRate> {
-        self.estimate_from_recent_blocks_percentile(confirmation_target, 75.0).await
+        self.estimate_from_recent_blocks_percentile(confirmation_target, 75.0)
+            .await
     }
 
     /// Estimate fee based on recent blocks at a specific percentile
-    async fn estimate_from_recent_blocks_percentile(&self, confirmation_target: u32, percentile: f64) -> Result<FeeRate> {
+    async fn estimate_from_recent_blocks_percentile(
+        &self,
+        confirmation_target: u32,
+        percentile: f64,
+    ) -> Result<FeeRate> {
         let recent = self.recent_blocks.read().await;
 
         if recent.is_empty() {
@@ -315,7 +328,8 @@ impl FeeEstimator {
 
         debug!(
             "Estimated fee from recent blocks: {} sat/vB ({}th percentile)",
-            estimated.as_sat_per_vb(), percentile
+            estimated.as_sat_per_vb(),
+            percentile
         );
         Ok(estimated)
     }
@@ -327,16 +341,19 @@ impl FeeEstimator {
         percentiles: &[f64],
     ) -> Result<Vec<(f64, FeeRate)>> {
         let mut results = Vec::new();
-        
+
         for &percentile in percentiles {
-            match self.estimate_fee_percentile(confirmation_target, percentile).await {
+            match self
+                .estimate_fee_percentile(confirmation_target, percentile)
+                .await
+            {
                 Ok(fee_rate) => results.push((percentile, fee_rate)),
                 Err(e) => {
                     debug!("Failed to estimate at {}th percentile: {}", percentile, e);
                 }
             }
         }
-        
+
         Ok(results)
     }
 
@@ -348,12 +365,14 @@ impl FeeEstimator {
     ) -> Result<SmartFeeEstimate> {
         // Use different percentiles based on mode
         let percentile = match mode {
-            EstimateMode::Economical => 25.0,    // 25th percentile for economical
-            EstimateMode::Conservative => 75.0,  // 75th percentile for conservative
-            EstimateMode::Normal => 50.0,        // 50th percentile (median) for normal
+            EstimateMode::Economical => 25.0, // 25th percentile for economical
+            EstimateMode::Conservative => 75.0, // 75th percentile for conservative
+            EstimateMode::Normal => 50.0,     // 50th percentile (median) for normal
         };
 
-        let fee_rate = self.estimate_fee_percentile(confirmation_target, percentile).await?;
+        let fee_rate = self
+            .estimate_fee_percentile(confirmation_target, percentile)
+            .await?;
 
         // Ensure we don't go below minimum
         let final_rate = fee_rate.max(self.min_relay_fee);
@@ -541,11 +560,26 @@ mod tests {
 
         // Test various percentiles
         // With 10 items (10, 20, 30, 40, 50, 60, 70, 80, 90, 100):
-        assert_eq!(bucket.percentile_fee_rate(0.0), Some(FeeRate::from_sat_per_vb(10)));   // Min
-        assert_eq!(bucket.percentile_fee_rate(25.0), Some(FeeRate::from_sat_per_vb(30)));  // 25th percentile
-        assert_eq!(bucket.percentile_fee_rate(50.0), Some(FeeRate::from_sat_per_vb(60)));  // Median (rounds up)
-        assert_eq!(bucket.percentile_fee_rate(75.0), Some(FeeRate::from_sat_per_vb(80)));  // 75th percentile  
-        assert_eq!(bucket.percentile_fee_rate(100.0), Some(FeeRate::from_sat_per_vb(100))); // Max
+        assert_eq!(
+            bucket.percentile_fee_rate(0.0),
+            Some(FeeRate::from_sat_per_vb(10))
+        ); // Min
+        assert_eq!(
+            bucket.percentile_fee_rate(25.0),
+            Some(FeeRate::from_sat_per_vb(30))
+        ); // 25th percentile
+        assert_eq!(
+            bucket.percentile_fee_rate(50.0),
+            Some(FeeRate::from_sat_per_vb(60))
+        ); // Median (rounds up)
+        assert_eq!(
+            bucket.percentile_fee_rate(75.0),
+            Some(FeeRate::from_sat_per_vb(80))
+        ); // 75th percentile
+        assert_eq!(
+            bucket.percentile_fee_rate(100.0),
+            Some(FeeRate::from_sat_per_vb(100))
+        ); // Max
     }
 
     #[tokio::test]

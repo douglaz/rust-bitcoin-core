@@ -240,10 +240,10 @@ mod tests {
     #[tokio::test]
     async fn test_dns_discovery() {
         let discovery = PeerDiscovery::new(Network::Bitcoin);
-        
+
         // Try to discover peers from DNS
         let result = discovery.discover_from_dns().await;
-        
+
         // DNS discovery might fail in test environment, but should not panic
         match result {
             Ok(peers) => {
@@ -263,12 +263,12 @@ mod tests {
     #[test]
     fn test_fallback_peers() {
         let discovery = PeerDiscovery::new(Network::Bitcoin);
-        
+
         // Check we have fallback peers defined
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let result = discovery.add_fallback_peers().await;
             assert!(result.is_ok());
-            
+
             // Should have added some fallback peers
             let peers = discovery.get_peers(10).await;
             assert!(!peers.is_empty(), "Should have fallback peers");
@@ -279,7 +279,10 @@ mod tests {
     fn test_default_seeds() {
         let discovery = PeerDiscovery::new(Network::Bitcoin);
         let seeds = discovery.default_seeds();
-        assert!(!seeds.is_empty(), "Should have default DNS seeds for mainnet");
+        assert!(
+            !seeds.is_empty(),
+            "Should have default DNS seeds for mainnet"
+        );
         assert!(seeds.len() >= 5, "Should have multiple DNS seeds");
     }
 }

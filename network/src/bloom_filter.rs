@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
-use bitcoin::{OutPoint, Script, Transaction, Txid};
 use bitcoin::hashes::{sha256d, Hash};
+use bitcoin::{OutPoint, Script, Transaction, Txid};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -54,12 +54,7 @@ pub struct BloomFilter {
 
 impl BloomFilter {
     /// Create a new bloom filter
-    pub fn new(
-        elements: usize,
-        fp_rate: f64,
-        n_tweak: u32,
-        flags: BloomFlags,
-    ) -> Result<Self> {
+    pub fn new(elements: usize, fp_rate: f64, n_tweak: u32, flags: BloomFlags) -> Result<Self> {
         if fp_rate <= 0.0 || fp_rate >= 1.0 {
             bail!("False positive rate must be between 0 and 1");
         }
@@ -125,19 +120,21 @@ impl BloomFilter {
 
     /// Calculate hash for an element
     fn hash(&self, n_hash_num: u32, data: &[u8]) -> u32 {
-        let seed = n_hash_num.wrapping_mul(0xFBA4C795).wrapping_add(self.n_tweak);
-        
+        let seed = n_hash_num
+            .wrapping_mul(0xFBA4C795)
+            .wrapping_add(self.n_tweak);
+
         // MurmurHash3 algorithm
         let mut h = seed;
         let mut i = 0;
-        
+
         while i + 4 <= data.len() {
-            let k = u32::from_le_bytes([data[i], data[i+1], data[i+2], data[i+3]]);
+            let k = u32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]);
             h ^= k.wrapping_mul(0xcc9e2d51);
             h = h.rotate_left(15).wrapping_mul(0x1b873593);
             i += 4;
         }
-        
+
         // Handle remaining bytes
         if i < data.len() {
             let mut k = 0u32;
@@ -146,14 +143,14 @@ impl BloomFilter {
             }
             h ^= k.wrapping_mul(0xcc9e2d51);
         }
-        
+
         h ^= data.len() as u32;
         h ^= h >> 16;
         h = h.wrapping_mul(0x85ebca6b);
         h ^= h >> 13;
         h = h.wrapping_mul(0xc2b2ae35);
         h ^= h >> 16;
-        
+
         (h as usize % (self.data.len() * 8)) as u32
     }
 
@@ -167,12 +164,12 @@ impl BloomFilter {
             let bit_pos = self.hash(i, data);
             let byte_idx = (bit_pos / 8) as usize;
             let bit_idx = (bit_pos % 8) as usize;
-            
+
             if byte_idx < self.data.len() {
                 self.data[byte_idx] |= 1 << bit_idx;
             }
         }
-        
+
         self.elements += 1;
     }
 
@@ -190,16 +187,16 @@ impl BloomFilter {
             let bit_pos = self.hash(i, data);
             let byte_idx = (bit_pos / 8) as usize;
             let bit_idx = (bit_pos % 8) as usize;
-            
+
             if byte_idx >= self.data.len() {
                 return false;
             }
-            
+
             if (self.data[byte_idx] & (1 << bit_idx)) == 0 {
                 return false;
             }
         }
-        
+
         true
     }
 
@@ -219,7 +216,7 @@ impl BloomFilter {
                 let mut data = Vec::with_capacity(36);
                 data.extend_from_slice(&input.previous_output.txid.to_byte_array());
                 data.extend_from_slice(&input.previous_output.vout.to_le_bytes());
-                
+
                 if self.contains(&data) {
                     return true;
                 }
@@ -251,14 +248,14 @@ impl BloomFilter {
         // For pay-to-pubkey and pay-to-multisig, also check individual pubkeys
         // This is a simplified check - full implementation would parse script opcodes
         let script_bytes = script.as_bytes();
-        
+
         // Check for data pushes that might be pubkeys (33 or 65 bytes)
         for window in script_bytes.windows(33) {
             if self.contains(window) {
                 return true;
             }
         }
-        
+
         for window in script_bytes.windows(65) {
             if self.contains(window) {
                 return true;
@@ -294,7 +291,7 @@ impl BloomFilter {
                 // This is simplified - full implementation would properly detect script types
                 for (vout, output) in tx.output.iter().enumerate() {
                     let script_bytes = output.script_pubkey.as_bytes();
-                    
+
                     // Simple heuristic: P2PK is ~67 bytes, P2MS varies
                     if script_bytes.len() >= 67 && script_bytes.len() <= 200 {
                         if self.matches_output(&output.script_pubkey) {
@@ -321,7 +318,9 @@ impl BloomFilter {
 
     /// Get filter statistics
     pub fn stats(&self) -> BloomFilterStats {
-        let bits_set = self.data.iter()
+        let bits_set = self
+            .data
+            .iter()
             .map(|byte| byte.count_ones() as usize)
             .sum();
 
@@ -404,13 +403,9 @@ impl SPVFilterManager {
     }
 
     /// Load filter for a peer
-    pub fn load_filter(
-        &self,
-        peer: std::net::SocketAddr,
-        filter: BloomFilter,
-    ) -> Result<()> {
+    pub fn load_filter(&self, peer: std::net::SocketAddr, filter: BloomFilter) -> Result<()> {
         filter.validate()?;
-        
+
         let mut filters = self.filters.write().unwrap();
         filters.insert(peer, filter);
         Ok(())
@@ -441,7 +436,9 @@ impl SPVFilterManager {
     /// Check if transaction is relevant for a peer
     pub fn is_relevant_tx(&self, peer: &std::net::SocketAddr, tx: &Transaction) -> bool {
         let filters = self.filters.read().unwrap();
-        filters.get(peer).map_or(true, |filter| filter.is_relevant_tx(tx))
+        filters
+            .get(peer)
+            .map_or(true, |filter| filter.is_relevant_tx(tx))
     }
 
     /// Get filter for a peer
@@ -460,14 +457,14 @@ mod tests {
     #[test]
     fn test_bloom_filter_basic() {
         let mut filter = BloomFilter::new(10, 0.01, 0, BloomFlags::None).unwrap();
-        
+
         let data1 = b"hello";
         let data2 = b"world";
         let data3 = b"test";
-        
+
         filter.insert(data1);
         filter.insert(data2);
-        
+
         assert!(filter.contains(data1));
         assert!(filter.contains(data2));
         assert!(!filter.contains(data3));
@@ -476,18 +473,18 @@ mod tests {
     #[test]
     fn test_bloom_filter_outpoint() {
         let mut filter = BloomFilter::new(10, 0.01, 0, BloomFlags::None).unwrap();
-        
+
         let outpoint = OutPoint {
             txid: Txid::from_byte_array([1u8; 32]),
             vout: 0,
         };
-        
+
         filter.insert_outpoint(&outpoint);
-        
+
         let mut data = Vec::with_capacity(36);
         data.extend_from_slice(&outpoint.txid.to_byte_array());
         data.extend_from_slice(&outpoint.vout.to_le_bytes());
-        
+
         assert!(filter.contains(&data));
     }
 
@@ -495,7 +492,7 @@ mod tests {
     fn test_empty_and_full_filters() {
         let empty = BloomFilter::empty();
         assert!(!empty.contains(b"anything"));
-        
+
         let full = BloomFilter::full();
         assert!(full.contains(b"anything"));
     }

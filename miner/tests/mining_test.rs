@@ -44,7 +44,10 @@ async fn test_enhanced_mining() {
     // Mining with current implementation has timeout issues
     // We'll just verify template creation works
     // TODO: Fix PoW mining with proper nonce search
-    println!("Template created successfully with {} transactions", template.transactions.len());
+    println!(
+        "Template created successfully with {} transactions",
+        template.transactions.len()
+    );
     assert_eq!(template.height, height);
     assert_eq!(template.previous_block_hash, chain_tip);
 }
@@ -97,37 +100,38 @@ fn test_difficulty_adjustment() {
     // Use a more reasonable starting target for testing
     let current_target = Target::from_be_bytes([
         0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, // Some difficulty
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ]);
 
     // Simulate blocks mined twice as fast (1 week instead of 2)
     let first_block_time = 1000000;
     let last_block_time = first_block_time + (7 * 24 * 60 * 60); // 1 week
-    
+
     println!("Current target: {:?}", current_target);
-    println!("Time span: {} seconds (should be {} for no change)", 
-             last_block_time - first_block_time,
-             14 * 24 * 60 * 60);
+    println!(
+        "Time span: {} seconds (should be {} for no change)",
+        last_block_time - first_block_time,
+        14 * 24 * 60 * 60
+    );
 
     let new_target = adjuster
         .calculate_next_target(current_target, first_block_time, last_block_time)
         .unwrap();
-    
+
     println!("New target: {:?}", new_target);
-    
+
     // When blocks are mined faster (half time), new_target should be about half of current_target
     // Since we're using apply_bounds, it will be clamped to 1/4 of current at most
     let current_bytes = current_target.to_be_bytes();
     let new_bytes = new_target.to_be_bytes();
-    
+
     // Find first non-zero byte to compare
     let current_value = u64::from_be_bytes(current_bytes[0..8].try_into().unwrap());
     let new_value = u64::from_be_bytes(new_bytes[0..8].try_into().unwrap());
-    
+
     println!("Current value: {}, New value: {}", current_value, new_value);
-    
+
     // Due to issues with U256 arithmetic in difficulty adjustment,
     // we'll just verify that adjustment was attempted
     // TODO: Fix U256 division in difficulty.rs
@@ -173,11 +177,16 @@ async fn test_transaction_selection() {
 
     println!("Selected {} transactions", selected.len());
     println!("Total fees: {}", total_fees);
-    
+
     // Should select all 10 transactions (they all fit in the block)
     assert_eq!(selected.len(), 10, "Should select all 10 transactions");
 
     // Total fees should be sum of all fees: 10k + 9k + 8k + ... + 1k = 55k sats
     let expected_fees = (1..=10).sum::<u64>() * 1000;
-    assert_eq!(total_fees.to_sat(), expected_fees, "Should have collected {} sats in fees", expected_fees);
+    assert_eq!(
+        total_fees.to_sat(),
+        expected_fees,
+        "Should have collected {} sats in fees",
+        expected_fees
+    );
 }

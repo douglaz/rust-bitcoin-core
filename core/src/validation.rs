@@ -8,7 +8,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing::{info, trace, warn};
 
-use crate::coinbase::{calculate_block_subsidy, calculate_block_subsidy_with_params, validate_coinbase};
+use crate::coinbase::{
+    calculate_block_subsidy, calculate_block_subsidy_with_params, validate_coinbase,
+};
 use crate::consensus::{ConsensusParams, ValidationResult};
 use crate::consensus_rules::{ConsensusRules, UtxoProvider};
 use crate::script::ScriptFlags;
@@ -413,7 +415,10 @@ impl BlockValidator {
     async fn validate_coinbase(&self, block: &Block, height: u32) -> Result<Result<(), String>> {
         // Calculate block reward and fees
         let block_reward = if self.consensus_params.network == bitcoin::Network::Regtest {
-            calculate_block_subsidy_with_params(height, self.consensus_params.subsidy_halving_interval)
+            calculate_block_subsidy_with_params(
+                height,
+                self.consensus_params.subsidy_halving_interval,
+            )
         } else {
             calculate_block_subsidy(height)
         };
@@ -528,7 +533,11 @@ impl BlockValidator {
     }
 
     /// Validate all transactions in block
-    async fn validate_all_transactions(&self, block: &Block, height: u32) -> Result<Result<(), String>> {
+    async fn validate_all_transactions(
+        &self,
+        block: &Block,
+        height: u32,
+    ) -> Result<Result<(), String>> {
         // No other transaction can be coinbase
         for (i, tx) in block.txdata[1..].iter().enumerate() {
             if tx.is_coinbase() {
@@ -559,7 +568,7 @@ impl BlockValidator {
 
         // Create tx validator with height-specific script flags
         let mut script_flags = ScriptFlags::P2SH;
-        
+
         // Add BIP65 CHECKLOCKTIMEVERIFY if active
         if self.consensus_rules.check_bip65(height) {
             script_flags |= ScriptFlags::CHECKLOCKTIMEVERIFY;

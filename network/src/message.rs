@@ -1,3 +1,4 @@
+use crate::wire_compact_blocks::*;
 use anyhow::{bail, Context, Result};
 use bitcoin::block::Header as BlockHeader;
 use bitcoin::consensus::{Decodable, Encodable};
@@ -6,7 +7,6 @@ use bitcoin::p2p::message_blockdata::{GetBlocksMessage, GetHeadersMessage};
 use bitcoin::p2p::message_network::VersionMessage;
 use bitcoin::{Block, BlockHash, Transaction};
 use serde::{Deserialize, Serialize};
-use crate::wire_compact_blocks::*;
 
 /// Our own inventory type since bitcoin 0.32 changed Inventory to an enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -244,45 +244,43 @@ pub fn deserialize_message(data: &[u8]) -> Result<(Message, usize)> {
 
     // Handle compact block messages specially
     let msg = match raw_msg.payload() {
-        NetworkMessage::Unknown { command, payload } => {
-            match command.as_ref() {
-                "sendcmpct" => {
-                    if let Ok(sc) = deserialize_sendcmpct(payload) {
-                        Message::SendCompact(SendCompact {
-                            high_bandwidth: sc.high_bandwidth,
-                            version: sc.version,
-                        })
-                    } else {
-                        Message::from_network_message(raw_msg.payload().clone())
-                    }
+        NetworkMessage::Unknown { command, payload } => match command.as_ref() {
+            "sendcmpct" => {
+                if let Ok(sc) = deserialize_sendcmpct(payload) {
+                    Message::SendCompact(SendCompact {
+                        high_bandwidth: sc.high_bandwidth,
+                        version: sc.version,
+                    })
+                } else {
+                    Message::from_network_message(raw_msg.payload().clone())
                 }
-                "cmpctblock" => {
-                    if let Ok(cb) = deserialize_compact_block(payload) {
-                        Message::CompactBlock(cb)
-                    } else {
-                        Message::from_network_message(raw_msg.payload().clone())
-                    }
-                }
-                "getblocktxn" => {
-                    if let Ok(gbt) = deserialize_getblocktxn(payload) {
-                        Message::GetBlockTxn(gbt)
-                    } else {
-                        Message::from_network_message(raw_msg.payload().clone())
-                    }
-                }
-                "blocktxn" => {
-                    if let Ok(bt) = deserialize_blocktxn(payload) {
-                        Message::BlockTxn(bt)
-                    } else {
-                        Message::from_network_message(raw_msg.payload().clone())
-                    }
-                }
-                _ => Message::from_network_message(raw_msg.payload().clone())
             }
-        }
-        _ => Message::from_network_message(raw_msg.payload().clone())
+            "cmpctblock" => {
+                if let Ok(cb) = deserialize_compact_block(payload) {
+                    Message::CompactBlock(cb)
+                } else {
+                    Message::from_network_message(raw_msg.payload().clone())
+                }
+            }
+            "getblocktxn" => {
+                if let Ok(gbt) = deserialize_getblocktxn(payload) {
+                    Message::GetBlockTxn(gbt)
+                } else {
+                    Message::from_network_message(raw_msg.payload().clone())
+                }
+            }
+            "blocktxn" => {
+                if let Ok(bt) = deserialize_blocktxn(payload) {
+                    Message::BlockTxn(bt)
+                } else {
+                    Message::from_network_message(raw_msg.payload().clone())
+                }
+            }
+            _ => Message::from_network_message(raw_msg.payload().clone()),
+        },
+        _ => Message::from_network_message(raw_msg.payload().clone()),
     };
-    
+
     let bytes_read = cursor.position() as usize;
 
     Ok((msg, bytes_read))

@@ -217,7 +217,7 @@ impl BalanceTracker {
     pub fn get_utxos(&self) -> Vec<&Utxo> {
         self.utxos.values().collect()
     }
-    
+
     /// Get a specific UTXO by outpoint
     pub fn get_utxo(&self, outpoint: &bitcoin::OutPoint) -> Option<&Utxo> {
         self.utxos.get(outpoint)

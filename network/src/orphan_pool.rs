@@ -384,8 +384,8 @@ impl Default for OrphanPool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::{Amount, OutPoint, TxIn, TxOut};
     use bitcoin::hashes::Hash;
+    use bitcoin::{Amount, OutPoint, TxIn, TxOut};
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     fn create_test_tx(inputs: Vec<OutPoint>) -> Transaction {

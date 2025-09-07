@@ -166,7 +166,7 @@ impl ReorgManager {
         // Validation: ensure new chain is valid
         let mut prev_header: Option<BlockHeader> = None;
         let mut height = fork.common_height;
-        
+
         for hash in &fork.new_chain {
             height += 1;
             let block = self
@@ -176,15 +176,19 @@ impl ReorgManager {
 
             // Validate the block with full consensus rules
             debug!("Validating block {} at height {} for reorg", hash, height);
-            let validation_result = self.validator
+            let validation_result = self
+                .validator
                 .validate_block(&block, height, prev_header.as_ref())
                 .await?;
-            
+
             if !validation_result.is_valid() {
-                error!("Block {} failed validation during reorg: {:?}", hash, validation_result);
+                error!(
+                    "Block {} failed validation during reorg: {:?}",
+                    hash, validation_result
+                );
                 bail!("Invalid block {} in new chain, aborting reorg", hash);
             }
-            
+
             // Update prev_header for next iteration
             prev_header = Some(block.header.clone());
         }
@@ -481,7 +485,7 @@ impl ReorgManager {
         // Calculate work based on the position of the highest bit
         // The work is approximately 2^(256 - highest_bit)
         let work_bits = 255_u16.saturating_sub(highest_bit as u16);
-        
+
         // Set the appropriate bytes in the work array
         let byte_pos = (work_bits / 8) as usize;
         let bit_pos = (work_bits % 8) as u8;
@@ -489,7 +493,7 @@ impl ReorgManager {
         if byte_pos < 32 {
             // Set the main work byte
             work[31 - byte_pos] = 1 << bit_pos;
-            
+
             // For more precision, consider the next few bits of the target
             if byte_pos > 0 && byte_pos < 32 {
                 let target_val = target_bytes[31 - byte_pos];

@@ -56,13 +56,17 @@ async fn test_simple_rpc_server() -> Result<()> {
         sleep(Duration::from_millis(200)).await;
         if let Ok(client) = HttpClientBuilder::default().build(format!("http://{}", addr)) {
             // Try a simple request to check if server is up
-            if client.request::<u32, _>("getblockcount", rpc_params![]).await.is_ok() {
+            if client
+                .request::<u32, _>("getblockcount", rpc_params![])
+                .await
+                .is_ok()
+            {
                 connected = true;
                 break;
             }
         }
     }
-    
+
     if !connected {
         server_handle.abort();
         panic!("Failed to connect to RPC server after 2 seconds");

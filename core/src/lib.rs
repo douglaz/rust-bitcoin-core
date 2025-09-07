@@ -1,26 +1,26 @@
 //! # Bitcoin Core Library
-//! 
+//!
 //! Core implementation of the Bitcoin protocol in Rust.
-//! 
+//!
 //! This library provides the fundamental components for Bitcoin blockchain
 //! validation, including transaction and block validation, UTXO management,
 //! script execution, and consensus rule enforcement.
-//! 
+//!
 //! ## Main Components
-//! 
+//!
 //! - **Chain Management**: Blockchain state tracking and management
 //! - **Validation**: Complete block and transaction validation
 //! - **UTXO Management**: Efficient unspent transaction output tracking
 //! - **Script Engine**: Bitcoin script interpreter with SegWit/Taproot support
 //! - **Consensus Rules**: Full consensus rule implementation
 //! - **Reorganization**: Chain reorganization handling
-//! 
+//!
 //! ## Example Usage
-//! 
+//!
 //! ```rust,ignore
 //! use bitcoin_core_lib::chain::ChainManager;
 //! use bitcoin_core_lib::validation::BlockValidator;
-//! 
+//!
 //! async fn example() -> anyhow::Result<()> {
 //!     // Initialize chain manager
 //!     let chain = ChainManager::new(Default::default()).await?;
@@ -35,16 +35,16 @@
 //! }
 //! ```
 
-pub mod bip68;
 pub mod bip112;
 pub mod bip113;
 pub mod bip143;
-pub mod config;
+pub mod bip68;
 pub mod bitcoin_primitives;
 pub mod block_validation;
 pub mod block_validation_pipeline;
 pub mod chain;
 pub mod coinbase;
+pub mod config;
 pub mod consensus;
 pub mod consensus_rules;
 pub mod database_sled;

@@ -225,7 +225,7 @@ impl DosProtectionManager {
             .or_insert_with(|| {
                 Arc::new(RateLimiter::new(
                     self.config.max_messages_per_second,
-                    Some(self.config.max_messages_per_second),  // Burst equals rate for strict limiting
+                    Some(self.config.max_messages_per_second), // Burst equals rate for strict limiting
                 ))
             })
             .clone();
@@ -294,7 +294,7 @@ impl DosProtectionManager {
         let should_ban;
         let should_disconnect;
         let new_score;
-        
+
         {
             let mut scores = self.peer_scores.write().await;
             let score = scores.entry(*peer_addr).or_insert(0);
@@ -501,45 +501,49 @@ impl DosProtectionManager {
         // Skip saving in tests to avoid filesystem operations
         #[cfg(test)]
         return Ok(());
-        
+
         #[cfg(not(test))]
         {
             debug!("Saving ban list to storage");
-            
+
             let ban_list = self.ban_list.read().await;
             let now = Instant::now();
             let system_now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-        
-        // Convert to serializable format, only keeping active bans
-        let serializable_entries: Vec<SerializableBanEntry> = ban_list
-            .values()
-            .filter(|entry| entry.ban_until > now)
-            .map(|entry| {
-                let remaining_duration = entry.ban_until.duration_since(now);
-                SerializableBanEntry {
-                    addr: entry.addr.to_string(),
-                    reason: entry.reason.clone(),
-                    banned_at_unix: system_now.saturating_sub(
-                        entry.ban_until.duration_since(entry.banned_at).as_secs()
-                    ),
-                    ban_duration_secs: remaining_duration.as_secs(),
-                    score: entry.score,
-                }
-            })
-            .collect();
-        
-        // Create data directory if it doesn't exist
-        let ban_list_path = Self::get_ban_list_path();
-        if let Some(parent) = ban_list_path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-        
-        // Write to file
-        let json = serde_json::to_string_pretty(&serializable_entries)?;
-        tokio::fs::write(&ban_list_path, json).await?;
-        
-        info!("Saved {} ban entries to {:?}", serializable_entries.len(), ban_list_path);
-        Ok(())
+
+            // Convert to serializable format, only keeping active bans
+            let serializable_entries: Vec<SerializableBanEntry> = ban_list
+                .values()
+                .filter(|entry| entry.ban_until > now)
+                .map(|entry| {
+                    let remaining_duration = entry.ban_until.duration_since(now);
+                    SerializableBanEntry {
+                        addr: entry.addr.to_string(),
+                        reason: entry.reason.clone(),
+                        banned_at_unix: system_now.saturating_sub(
+                            entry.ban_until.duration_since(entry.banned_at).as_secs(),
+                        ),
+                        ban_duration_secs: remaining_duration.as_secs(),
+                        score: entry.score,
+                    }
+                })
+                .collect();
+
+            // Create data directory if it doesn't exist
+            let ban_list_path = Self::get_ban_list_path();
+            if let Some(parent) = ban_list_path.parent() {
+                tokio::fs::create_dir_all(parent).await?;
+            }
+
+            // Write to file
+            let json = serde_json::to_string_pretty(&serializable_entries)?;
+            tokio::fs::write(&ban_list_path, json).await?;
+
+            info!(
+                "Saved {} ban entries to {:?}",
+                serializable_entries.len(),
+                ban_list_path
+            );
+            Ok(())
         }
     }
 
@@ -548,54 +552,58 @@ impl DosProtectionManager {
         // Skip loading in tests to avoid filesystem operations
         #[cfg(test)]
         return Ok(());
-        
+
         #[cfg(not(test))]
         {
             debug!("Loading ban list from storage");
-            
+
             let ban_list_path = Self::get_ban_list_path();
-        
-        // Check if file exists
-        if !ban_list_path.exists() {
-            debug!("Ban list file does not exist, starting with empty ban list");
-            return Ok(());
-        }
-        
-        // Read and parse file
-        let json = tokio::fs::read_to_string(&ban_list_path).await?;
-        let serializable_entries: Vec<SerializableBanEntry> = serde_json::from_str(&json)?;
-        
-        let now = Instant::now();
-        let mut ban_list = self.ban_list.write().await;
-        
-        // Convert from serializable format
-        for entry in serializable_entries {
-            // Parse socket address
-            let addr: SocketAddr = entry.addr.parse()?;
-            
-            // Calculate ban times
-            let ban_duration = Duration::from_secs(entry.ban_duration_secs);
-            let ban_until = now + ban_duration;
-            
-            // Skip if ban has expired
-            if ban_until <= now {
-                continue;
+
+            // Check if file exists
+            if !ban_list_path.exists() {
+                debug!("Ban list file does not exist, starting with empty ban list");
+                return Ok(());
             }
-            
-            // Create ban entry
-            let ban_entry = BanEntry {
-                addr,
-                reason: entry.reason,
-                banned_at: now, // Use current time as reference
-                ban_until,
-                score: entry.score,
-            };
-            
-            ban_list.insert(addr, ban_entry);
-        }
-        
-        info!("Loaded {} ban entries from {:?}", ban_list.len(), ban_list_path);
-        Ok(())
+
+            // Read and parse file
+            let json = tokio::fs::read_to_string(&ban_list_path).await?;
+            let serializable_entries: Vec<SerializableBanEntry> = serde_json::from_str(&json)?;
+
+            let now = Instant::now();
+            let mut ban_list = self.ban_list.write().await;
+
+            // Convert from serializable format
+            for entry in serializable_entries {
+                // Parse socket address
+                let addr: SocketAddr = entry.addr.parse()?;
+
+                // Calculate ban times
+                let ban_duration = Duration::from_secs(entry.ban_duration_secs);
+                let ban_until = now + ban_duration;
+
+                // Skip if ban has expired
+                if ban_until <= now {
+                    continue;
+                }
+
+                // Create ban entry
+                let ban_entry = BanEntry {
+                    addr,
+                    reason: entry.reason,
+                    banned_at: now, // Use current time as reference
+                    ban_until,
+                    score: entry.score,
+                };
+
+                ban_list.insert(addr, ban_entry);
+            }
+
+            info!(
+                "Loaded {} ban entries from {:?}",
+                ban_list.len(),
+                ban_list_path
+            );
+            Ok(())
         }
     }
 }

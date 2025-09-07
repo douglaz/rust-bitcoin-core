@@ -413,7 +413,12 @@ impl Miner {
     }
 
     /// Get mining statistics
-    pub fn get_mining_info(&self, height: u32, target: Target, mempool_size: usize) -> serde_json::Value {
+    pub fn get_mining_info(
+        &self,
+        height: u32,
+        target: Target,
+        mempool_size: usize,
+    ) -> serde_json::Value {
         use crate::difficulty::DifficultyStats;
 
         let stats = DifficultyStats::calculate(height, target, &self.difficulty_adjuster);

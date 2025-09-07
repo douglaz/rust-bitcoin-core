@@ -1,12 +1,10 @@
 use anyhow::Result;
-use bitcoin::{Block, Network, OutPoint, Transaction, TxOut};
 use bitcoin::hashes::Hash;
+use bitcoin::{Block, Network, OutPoint, Transaction, TxOut};
+use network::compact_block_protocol::{CompactBlockConfig, CompactBlockProtocol, SendCmpct};
 use network::compact_blocks::{
     CompactBlock, CompactBlockRelay, CompactBlockResult, PrefilledTransaction, ShortTxId,
     COMPACT_BLOCK_VERSION,
-};
-use network::compact_block_protocol::{
-    CompactBlockConfig, CompactBlockProtocol, SendCmpct,
 };
 use std::sync::Arc;
 
@@ -42,7 +40,9 @@ async fn test_compact_block_creation_from_full_block() -> Result<()> {
             lock_time: bitcoin::absolute::LockTime::ZERO,
             input: vec![bitcoin::TxIn {
                 previous_output: OutPoint {
-                    txid: bitcoin::Txid::from(bitcoin::hashes::sha256d::Hash::from_byte_array([i as u8; 32])),
+                    txid: bitcoin::Txid::from(bitcoin::hashes::sha256d::Hash::from_byte_array(
+                        [i as u8; 32],
+                    )),
                     vout: 0,
                 },
                 script_sig: bitcoin::ScriptBuf::new(),
@@ -87,13 +87,13 @@ async fn test_compact_block_reconstruction_simple() -> Result<()> {
     // Test reconstruction with only coinbase (simplest case)
     let block = bitcoin::blockdata::constants::genesis_block(Network::Testnet);
     let compact = CompactBlock::from_block(&block, Some(123));
-    
+
     // Create relay without mempool
     let relay = CompactBlockRelay::new(None);
-    
+
     // Process compact block - should reconstruct genesis block successfully
     let result = relay.process_compact_block(compact).await?;
-    
+
     match result {
         CompactBlockResult::Reconstructed(reconstructed) => {
             assert_eq!(reconstructed.header, block.header);
@@ -103,7 +103,7 @@ async fn test_compact_block_reconstruction_simple() -> Result<()> {
             panic!("Should have reconstructed genesis block");
         }
     }
-    
+
     Ok(())
 }
 
@@ -120,7 +120,9 @@ async fn test_compact_block_missing_transactions() -> Result<()> {
             lock_time: bitcoin::absolute::LockTime::ZERO,
             input: vec![bitcoin::TxIn {
                 previous_output: OutPoint {
-                    txid: bitcoin::Txid::from(bitcoin::hashes::sha256d::Hash::from_byte_array([i as u8; 32])),
+                    txid: bitcoin::Txid::from(bitcoin::hashes::sha256d::Hash::from_byte_array(
+                        [i as u8; 32],
+                    )),
                     vout: 0,
                 },
                 script_sig: bitcoin::ScriptBuf::new(),
@@ -167,9 +169,7 @@ async fn test_protocol_sendcmpct_negotiation() -> Result<()> {
         high_bandwidth: false,
         version: 1,
     };
-    let response = protocol
-        .handle_sendcmpct("peer1", sendcmpct_v1)
-        .await?;
+    let response = protocol.handle_sendcmpct("peer1", sendcmpct_v1).await?;
     assert!(response.is_some()); // Should respond with our sendcmpct
 
     // Test version 2 (SegWit)
@@ -177,9 +177,7 @@ async fn test_protocol_sendcmpct_negotiation() -> Result<()> {
         high_bandwidth: true,
         version: 2,
     };
-    let response = protocol
-        .handle_sendcmpct("peer2", sendcmpct_v2)
-        .await?;
+    let response = protocol.handle_sendcmpct("peer2", sendcmpct_v2).await?;
     assert!(response.is_some());
 
     // Verify peer states
@@ -282,7 +280,9 @@ async fn test_compact_block_with_prefilled_transactions() -> Result<()> {
             lock_time: bitcoin::absolute::LockTime::ZERO,
             input: vec![bitcoin::TxIn {
                 previous_output: OutPoint {
-                    txid: bitcoin::Txid::from(bitcoin::hashes::sha256d::Hash::from_byte_array([i as u8; 32])),
+                    txid: bitcoin::Txid::from(bitcoin::hashes::sha256d::Hash::from_byte_array(
+                        [i as u8; 32],
+                    )),
                     vout: 0,
                 },
                 script_sig: bitcoin::ScriptBuf::new(),

@@ -39,7 +39,7 @@ impl KeyChain {
             secp,
         })
     }
-    
+
     /// Get the seed from a mnemonic (for encryption purposes)
     pub fn seed_from_mnemonic(mnemonic_str: &str, passphrase: &str) -> WalletResult<Vec<u8>> {
         let mnemonic =

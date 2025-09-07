@@ -48,13 +48,13 @@ impl ProofOfWorkMiner {
 
         let start_time = Instant::now();
         let timeout_duration = timeout.unwrap_or(Duration::from_secs(600)); // 10 minutes default
-        
+
         // Fast path for very easy targets (regtest/testing)
         if target == Target::MAX || target.to_compact_lossy().to_consensus() == 0x207fffff {
             // For regtest or minimum difficulty, just use a simple nonce
             header.nonce = 1;
             let hash = header.block_hash();
-            
+
             // Check if it's valid (it usually is for MAX target)
             if Self::check_proof_of_work(&hash, target) {
                 let stats = MiningStats {
@@ -66,7 +66,7 @@ impl ProofOfWorkMiner {
                 };
                 return Ok((header, stats));
             }
-            
+
             // Try a few more nonces quickly
             for nonce in 2..1000 {
                 header.nonce = nonce;

@@ -180,36 +180,36 @@ impl CompactBlockRelay {
             stats: Arc::new(RwLock::new(CompactBlockStats::default())),
         }
     }
-    
+
     /// Build short ID lookup cache for a given nonce
     async fn build_short_id_cache(&self, nonce: u64) -> HashMap<ShortTxId, Txid> {
         let mut cache = HashMap::new();
-        
+
         // Add transactions from mempool
         if let Some(mempool) = &self.mempool {
             let mempool_guard = mempool.read().await;
             let tx_ids = mempool_guard.get_transaction_ids();
-            
+
             for txid in tx_ids {
                 let short_id = ShortTxId::from_txid(&txid, nonce);
                 cache.insert(short_id, txid);
             }
         }
-        
+
         // Add transactions from tx_cache
         let tx_cache = self.tx_cache.read().await;
         for txid in tx_cache.keys() {
             let short_id = ShortTxId::from_txid(txid, nonce);
             cache.insert(short_id, *txid);
         }
-        
+
         // Add transactions from recent_txs_by_id
         let recent_by_id = self.recent_txs_by_id.read().await;
         for txid in recent_by_id.keys() {
             let short_id = ShortTxId::from_txid(txid, nonce);
             cache.insert(short_id, *txid);
         }
-        
+
         cache
     }
 
@@ -295,14 +295,14 @@ impl CompactBlockRelay {
         // Build or get cached short ID lookup
         let short_id_lookup = {
             let mut cache = self.short_id_cache.write().await;
-            
+
             // Check if we have a cached lookup for this nonce
             if let Some(lookup) = cache.get(&nonce) {
                 lookup.clone()
             } else {
                 // Build new lookup and cache it
                 let lookup = self.build_short_id_cache(nonce).await;
-                
+
                 // Keep cache size reasonable (max 10 nonces)
                 if cache.len() >= 10 {
                     // Remove oldest entry (first in HashMap)
@@ -310,7 +310,7 @@ impl CompactBlockRelay {
                         cache.remove(&key);
                     }
                 }
-                
+
                 cache.insert(nonce, lookup.clone());
                 lookup
             }
@@ -335,7 +335,7 @@ impl CompactBlockRelay {
             if let Some(txid) = short_id_lookup.get(short_id) {
                 // Try to get transaction from various sources
                 let mut found_tx = None;
-                
+
                 // Check mempool first
                 if let Some(mempool) = &self.mempool {
                     let mempool_guard = mempool.read().await;
@@ -343,7 +343,7 @@ impl CompactBlockRelay {
                         found_tx = Some(tx);
                     }
                 }
-                
+
                 // Check tx_cache if not found in mempool
                 if found_tx.is_none() {
                     let tx_cache = self.tx_cache.read().await;
@@ -351,7 +351,7 @@ impl CompactBlockRelay {
                         found_tx = Some(tx.clone());
                     }
                 }
-                
+
                 // Check recent_txs_by_id if still not found
                 if found_tx.is_none() {
                     let recent_by_id = self.recent_txs_by_id.read().await;
@@ -359,11 +359,11 @@ impl CompactBlockRelay {
                         found_tx = Some(tx.clone());
                     }
                 }
-                
+
                 if let Some(tx) = found_tx {
                     *slot = Some(tx.clone());
                     self.stats.write().await.txs_from_mempool += 1;
-                    
+
                     // Cache for future use
                     self.recent_txs.write().await.insert(*short_id, tx.clone());
                 } else {
@@ -472,7 +472,7 @@ impl CompactBlockRelay {
         // Add to tx_cache and recent_txs_by_id
         self.tx_cache.write().await.insert(txid, tx.clone());
         self.recent_txs_by_id.write().await.insert(txid, tx.clone());
-        
+
         // Add with multiple nonces for better matching
         for nonce_offset in 0..4 {
             let nonce = rand::random::<u64>().wrapping_add(nonce_offset);

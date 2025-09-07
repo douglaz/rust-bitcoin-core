@@ -1,5 +1,5 @@
 //! Bitcoin Core test vector validation
-//! 
+//!
 //! This module loads and validates against Bitcoin Core's consensus test vectors
 //! to ensure compatibility with the reference implementation.
 
@@ -15,7 +15,7 @@ use std::path::Path;
 /// Parse script flags from string representation
 fn parse_script_flags(flags_str: &str) -> ScriptFlags {
     let mut flags = ScriptFlags::NONE;
-    
+
     for flag in flags_str.split(',') {
         match flag.trim() {
             "P2SH" => flags |= ScriptFlags::P2SH,
@@ -28,20 +28,26 @@ fn parse_script_flags(flags_str: &str) -> ScriptFlags {
             "CHECKLOCKTIMEVERIFY" => flags |= ScriptFlags::CHECKLOCKTIMEVERIFY,
             "CHECKSEQUENCEVERIFY" => flags |= ScriptFlags::CHECKSEQUENCEVERIFY,
             "WITNESS" => flags |= ScriptFlags::WITNESS,
-            "DISCOURAGE_UPGRADEABLE_WITNESS_PROGRAM" => flags |= ScriptFlags::DISCOURAGE_UPGRADEABLE_WITNESS_PROGRAM,
+            "DISCOURAGE_UPGRADEABLE_WITNESS_PROGRAM" => {
+                flags |= ScriptFlags::DISCOURAGE_UPGRADEABLE_WITNESS_PROGRAM
+            }
             "WITNESS_PUBKEYTYPE" => flags |= ScriptFlags::WITNESS_PUBKEYTYPE,
             "TAPROOT" => flags |= ScriptFlags::TAPROOT,
-            "DISCOURAGE_UPGRADEABLE_TAPROOT_VERSION" => flags |= ScriptFlags::DISCOURAGE_UPGRADEABLE_TAPROOT_VERSION,
+            "DISCOURAGE_UPGRADEABLE_TAPROOT_VERSION" => {
+                flags |= ScriptFlags::DISCOURAGE_UPGRADEABLE_TAPROOT_VERSION
+            }
             "DISCOURAGE_OP_SUCCESS" => flags |= ScriptFlags::DISCOURAGE_OP_SUCCESS,
-            "DISCOURAGE_UPGRADEABLE_PUBKEYTYPE" => flags |= ScriptFlags::DISCOURAGE_UPGRADEABLE_PUBKEYTYPE,
-            "" | "NONE" => {},
+            "DISCOURAGE_UPGRADEABLE_PUBKEYTYPE" => {
+                flags |= ScriptFlags::DISCOURAGE_UPGRADEABLE_PUBKEYTYPE
+            }
+            "" | "NONE" => {}
             _ => {
                 // Unknown flag, ignore for now
                 eprintln!("Warning: Unknown script flag: {}", flag);
             }
         }
     }
-    
+
     flags
 }
 
@@ -72,11 +78,11 @@ fn parse_script(script_str: &str) -> Result<ScriptBuf> {
     if script_str.is_empty() {
         return Ok(ScriptBuf::new());
     }
-    
+
     // Check if it's all hex values or mixed with opcodes
     let parts: Vec<&str> = script_str.split_whitespace().collect();
     let all_hex = parts.iter().all(|p| p.starts_with("0x"));
-    
+
     // Handle space-separated hex values (e.g., "0x4c 0xFF 0x00")
     if all_hex && !parts.is_empty() {
         let mut bytes = Vec::new();
@@ -86,18 +92,18 @@ fn parse_script(script_str: &str) -> Result<ScriptBuf> {
         }
         return Ok(ScriptBuf::from(bytes));
     }
-    
+
     // Handle single hex-encoded scripts
     if script_str.starts_with("0x") && !script_str.contains(" ") {
         let hex_str = &script_str[2..];
         let bytes = hex::decode(hex_str)?;
         return Ok(ScriptBuf::from(bytes));
     }
-    
+
     // Handle assembly-style scripts
     let mut builder = bitcoin::script::Builder::new();
     let parts: Vec<&str> = script_str.split_whitespace().collect();
-    
+
     for part in parts {
         match part {
             "0" | "OP_0" | "OP_FALSE" => builder = builder.push_opcode(opcodes::OP_FALSE),
@@ -106,9 +112,13 @@ fn parse_script(script_str: &str) -> Result<ScriptBuf> {
             "DUP" | "OP_DUP" => builder = builder.push_opcode(opcodes::all::OP_DUP),
             "HASH160" | "OP_HASH160" => builder = builder.push_opcode(opcodes::all::OP_HASH160),
             "EQUAL" | "OP_EQUAL" => builder = builder.push_opcode(opcodes::all::OP_EQUAL),
-            "EQUALVERIFY" | "OP_EQUALVERIFY" => builder = builder.push_opcode(opcodes::all::OP_EQUALVERIFY),
+            "EQUALVERIFY" | "OP_EQUALVERIFY" => {
+                builder = builder.push_opcode(opcodes::all::OP_EQUALVERIFY)
+            }
             "CHECKSIG" | "OP_CHECKSIG" => builder = builder.push_opcode(opcodes::all::OP_CHECKSIG),
-            "CHECKMULTISIG" | "OP_CHECKMULTISIG" => builder = builder.push_opcode(opcodes::all::OP_CHECKMULTISIG),
+            "CHECKMULTISIG" | "OP_CHECKMULTISIG" => {
+                builder = builder.push_opcode(opcodes::all::OP_CHECKMULTISIG)
+            }
             "CHECKLOCKTIMEVERIFY" => builder = builder.push_opcode(opcodes::all::OP_CLTV),
             "CHECKSEQUENCEVERIFY" => builder = builder.push_opcode(opcodes::all::OP_CSV),
             "IF" | "OP_IF" => builder = builder.push_opcode(opcodes::all::OP_IF),
@@ -143,7 +153,7 @@ fn parse_script(script_str: &str) -> Result<ScriptBuf> {
             }
         }
     }
-    
+
     Ok(builder.into_script())
 }
 
@@ -162,7 +172,7 @@ impl bitcoin_core_lib::script::SignatureChecker for VectorTestChecker {
         if signature.is_empty() {
             return Ok(false);
         }
-        
+
         // For test vectors, validate DER encoding if STRICTENC flag is set
         if flags.contains(ScriptFlags::STRICTENC) {
             // Basic DER validation
@@ -171,17 +181,17 @@ impl bitcoin_core_lib::script::SignatureChecker for VectorTestChecker {
             if signature.len() < 9 {
                 return Err(ScriptError::SigDer);
             }
-            
+
             // Check DER header
             if signature[0] != 0x30 {
                 return Err(ScriptError::SigDer);
             }
-            
+
             // Check that length matches
             if signature.len() < 3 {
                 return Err(ScriptError::SigDer);
             }
-            
+
             let stated_len = signature[1] as usize;
             // DER signature is 0x30 [len] [content] [sighash_byte]
             // So total length should be 1 (0x30) + 1 (len) + stated_len + 1 (sighash)
@@ -189,7 +199,7 @@ impl bitcoin_core_lib::script::SignatureChecker for VectorTestChecker {
                 return Err(ScriptError::SigDer);
             }
         }
-        
+
         // For test vectors, we assume signatures are valid unless clearly malformed
         Ok(true)
     }
@@ -228,24 +238,23 @@ impl bitcoin_core_lib::script::SignatureChecker for VectorTestChecker {
 fn test_simple_script_vectors() {
     let test_data = include_str!("data/simple_script_tests.json");
     let json: Value = serde_json::from_str(test_data).expect("Failed to parse test JSON");
-    
+
     run_script_tests(json, "Simple");
 }
 
-#[test] 
+#[test]
 fn test_bitcoin_core_script_vectors() {
     let test_data = include_str!("data/script_tests.json");
     let json: Value = serde_json::from_str(test_data).expect("Failed to parse test JSON");
-    
+
     run_script_tests(json, "Bitcoin Core");
 }
 
 fn run_script_tests(json: Value, test_name: &str) {
-    
     let mut passed = 0;
     let mut failed = 0;
     let mut skipped = 0;
-    
+
     if let Value::Array(tests) = json {
         for test in tests {
             if let Value::Array(test_vec) = test {
@@ -253,12 +262,12 @@ fn run_script_tests(json: Value, test_name: &str) {
                 if test_vec.len() == 1 {
                     continue;
                 }
-                
+
                 // Skip format description
                 if test_vec.len() == 2 {
                     continue;
                 }
-                
+
                 // Parse test vector [scriptSig, scriptPubKey, flags, expected, description]
                 if test_vec.len() == 5 {
                     let script_sig_str = test_vec[0].as_str().unwrap_or("");
@@ -266,13 +275,13 @@ fn run_script_tests(json: Value, test_name: &str) {
                     let flags_str = test_vec[2].as_str().unwrap_or("");
                     let expected_str = test_vec[3].as_str().unwrap_or("");
                     let description = test_vec[4].as_str().unwrap_or("No description");
-                    
+
                     // Skip tests with complex hex signatures for now
                     if script_sig_str.len() > 100 && script_sig_str.contains("304402") {
                         skipped += 1;
                         continue;
                     }
-                    
+
                     let script_sig = match parse_script(script_sig_str) {
                         Ok(s) => s,
                         Err(e) => {
@@ -281,7 +290,7 @@ fn run_script_tests(json: Value, test_name: &str) {
                             continue;
                         }
                     };
-                    
+
                     let script_pubkey = match parse_script(script_pubkey_str) {
                         Ok(s) => s,
                         Err(e) => {
@@ -290,24 +299,28 @@ fn run_script_tests(json: Value, test_name: &str) {
                             continue;
                         }
                     };
-                    
+
                     let flags = parse_script_flags(flags_str);
                     let expected = parse_expected_result(expected_str);
-                    
+
                     let checker = VectorTestChecker;
                     let result = verify_script(&script_sig, &script_pubkey, flags, &checker);
-                    
+
                     // Compare results
                     match (&result, &expected) {
                         (Ok(()), Ok(())) => {
                             passed += 1;
                         }
-                        (Err(e1), Err(e2)) if std::mem::discriminant(e1) == std::mem::discriminant(e2) => {
+                        (Err(e1), Err(e2))
+                            if std::mem::discriminant(e1) == std::mem::discriminant(e2) =>
+                        {
                             passed += 1;
                         }
                         _ => {
-                            eprintln!("Test '{}' failed: expected {:?}, got {:?}", 
-                                     description, expected, result);
+                            eprintln!(
+                                "Test '{}' failed: expected {:?}, got {:?}",
+                                description, expected, result
+                            );
                             failed += 1;
                         }
                     }
@@ -315,16 +328,21 @@ fn run_script_tests(json: Value, test_name: &str) {
             }
         }
     }
-    
+
     println!("\n=== {} Script Test Results ===", test_name);
     println!("Passed: {}", passed);
     println!("Failed: {}", failed);
     println!("Skipped: {}", skipped);
     println!("Total: {}", passed + failed + skipped);
-    
+
     // Assert that most tests pass
     assert!(passed > 0, "No tests passed");
-    assert!(failed < passed / 2, "Too many tests failed: {} failed vs {} passed", failed, passed);
+    assert!(
+        failed < passed / 2,
+        "Too many tests failed: {} failed vs {} passed",
+        failed,
+        passed
+    );
 }
 
 #[test]

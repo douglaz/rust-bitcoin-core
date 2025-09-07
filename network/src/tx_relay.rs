@@ -144,10 +144,7 @@ impl TxRequestTracker {
                 request_time: Instant::now() + TX_REQUEST_RETRY_DELAY,
             };
 
-            self.announced
-                .entry(txid)
-                .or_default()
-                .push(announcement);
+            self.announced.entry(txid).or_default().push(announcement);
 
             self.stats.duplicate_announcements += 1;
             debug!(
@@ -167,10 +164,7 @@ impl TxRequestTracker {
         };
 
         let is_new = !self.announced.contains_key(&txid);
-        self.announced
-            .entry(txid)
-            .or_default()
-            .push(announcement);
+        self.announced.entry(txid).or_default().push(announcement);
 
         // Clean up old announcements if we have too many
         if self.announced.len() > MAX_TX_ANNOUNCEMENTS {
@@ -241,10 +235,7 @@ impl TxRequestTracker {
         };
 
         self.in_flight.insert(txid, request);
-        self.peer_in_flight
-            .entry(peer)
-            .or_default()
-            .insert(txid);
+        self.peer_in_flight.entry(peer).or_default().insert(txid);
 
         self.stats.requests_sent += 1;
 

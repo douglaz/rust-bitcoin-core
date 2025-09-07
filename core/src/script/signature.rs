@@ -1,6 +1,6 @@
+use crate::bip112;
 use crate::script::error::{ScriptError, ScriptResult};
 use crate::script::flags::ScriptFlags;
-use crate::bip112;
 use bitcoin::ecdsa::Signature as EcdsaSignature;
 use bitcoin::hashes::Hash;
 use bitcoin::secp256k1::{self, Message, PublicKey, Secp256k1, XOnlyPublicKey};
@@ -147,11 +147,7 @@ impl<'a> TransactionSignatureChecker<'a> {
         } else {
             // Use legacy sighash for non-witness transactions
             cache
-                .legacy_signature_hash(
-                    self.input_index,
-                    script,
-                    sighash_type.to_u32(),
-                )
+                .legacy_signature_hash(self.input_index, script, sighash_type.to_u32())
                 .map_err(|_| ScriptError::Unknown)?
                 .to_byte_array()
         };
@@ -303,7 +299,7 @@ impl<'a> SignatureChecker for TransactionSignatureChecker<'a> {
             self.tx.version.0,
         )
         .map_err(|_| ScriptError::InvalidStackOperation)?;
-        
+
         Ok(result)
     }
 }

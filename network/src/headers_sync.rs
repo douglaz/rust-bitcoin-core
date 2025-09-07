@@ -371,11 +371,11 @@ impl HeadersSyncManager {
     pub async fn get_locator_hashes(&self) -> Vec<BlockHash> {
         let storage = self.storage.read().await;
         let tip_height = storage.get_chain_tip().map(|c| c.height).unwrap_or(0);
-        
+
         let mut locator = Vec::new();
         let mut step = 1;
         let mut height = tip_height;
-        
+
         // Build locator following Bitcoin Core's algorithm
         // Recent blocks: every block for the last 10
         // Then exponentially increasing steps
@@ -383,29 +383,31 @@ impl HeadersSyncManager {
             if let Some(header) = storage.get_header_by_height(height) {
                 locator.push(header.block_hash());
             }
-            
+
             if locator.len() >= 10 {
                 step *= 2;
             }
-            
+
             height = height.saturating_sub(step);
         }
-        
+
         // Always include genesis
         if let Some(genesis) = storage.get_header_by_height(0) {
             locator.push(genesis.block_hash());
         }
-        
+
         locator
     }
 
     /// Handle timeout for headers sync
     pub async fn check_timeout(&self) -> Result<()> {
-        if let HeadersSyncState::Syncing { started_at, peer, .. } = *self.state.read().await {
+        if let HeadersSyncState::Syncing {
+            started_at, peer, ..
+        } = *self.state.read().await
+        {
             if started_at.elapsed() > HEADERS_SYNC_TIMEOUT {
-                *self.state.write().await = HeadersSyncState::Failed(
-                    format!("Headers sync with {} timed out", peer)
-                );
+                *self.state.write().await =
+                    HeadersSyncState::Failed(format!("Headers sync with {} timed out", peer));
                 bail!("Headers sync timeout");
             }
         }
@@ -429,25 +431,23 @@ impl HeadersSyncManager {
 
     /// Get the best header hash
     pub async fn get_best_header(&self) -> Option<BlockHash> {
-        self.storage.read().await
-            .get_chain_tip()
-            .map(|c| c.tip)
+        self.storage.read().await.get_chain_tip().map(|c| c.tip)
     }
 
     /// Validate headers chain continuity
     pub async fn validate_chain_continuity(&self) -> Result<bool> {
         let storage = self.storage.read().await;
-        
+
         if let Some(tip) = storage.get_chain_tip() {
             let mut current_height = tip.height;
             let mut current_hash = tip.tip;
-            
+
             // Walk backwards and verify each header points to its parent
             while current_height > 0 {
                 if let Some(header) = storage.get_header(&current_hash) {
                     current_hash = header.prev_blockhash;
                     current_height -= 1;
-                    
+
                     // Verify the parent exists at the expected height
                     if let Some(parent) = storage.get_header_by_height(current_height) {
                         if parent.block_hash() != current_hash {
@@ -459,14 +459,14 @@ impl HeadersSyncManager {
                 } else {
                     bail!("Missing header {}", current_hash);
                 }
-                
+
                 // Only check last 1000 blocks for performance
                 if tip.height - current_height >= 1000 {
                     break;
                 }
             }
         }
-        
+
         Ok(true)
     }
 }
@@ -479,62 +479,106 @@ fn get_checkpoints(network: Network) -> HashMap<u32, BlockHash> {
         Network::Bitcoin => {
             // Add mainnet checkpoints (real Bitcoin mainnet values)
             use std::str::FromStr;
-            
+
             // Block 11111
-            checkpoints.insert(11111, BlockHash::from_str(
-                "0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d"
-            ).unwrap());
-            
+            checkpoints.insert(
+                11111,
+                BlockHash::from_str(
+                    "0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d",
+                )
+                .unwrap(),
+            );
+
             // Block 100000
-            checkpoints.insert(100000, BlockHash::from_str(
-                "000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506"
-            ).unwrap());
-            
+            checkpoints.insert(
+                100000,
+                BlockHash::from_str(
+                    "000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506",
+                )
+                .unwrap(),
+            );
+
             // Block 200000
-            checkpoints.insert(200000, BlockHash::from_str(
-                "000000000000034a7dedef4a161fa058a2d67a173a90155f3a2fe6fc132e0ebf"
-            ).unwrap());
-            
+            checkpoints.insert(
+                200000,
+                BlockHash::from_str(
+                    "000000000000034a7dedef4a161fa058a2d67a173a90155f3a2fe6fc132e0ebf",
+                )
+                .unwrap(),
+            );
+
             // Block 300000
-            checkpoints.insert(300000, BlockHash::from_str(
-                "000000000000000082ccf8f1557c5d40b21edabb18d2d691cfbf87118bac7254"
-            ).unwrap());
-            
+            checkpoints.insert(
+                300000,
+                BlockHash::from_str(
+                    "000000000000000082ccf8f1557c5d40b21edabb18d2d691cfbf87118bac7254",
+                )
+                .unwrap(),
+            );
+
             // Block 400000
-            checkpoints.insert(400000, BlockHash::from_str(
-                "000000000000000004ec466ce4732fe6f1ed1cddc2ed4b328fff5224276e3f6f"
-            ).unwrap());
-            
+            checkpoints.insert(
+                400000,
+                BlockHash::from_str(
+                    "000000000000000004ec466ce4732fe6f1ed1cddc2ed4b328fff5224276e3f6f",
+                )
+                .unwrap(),
+            );
+
             // Block 500000
-            checkpoints.insert(500000, BlockHash::from_str(
-                "00000000000000000024fb37364cbf81fd49cc2d51c09c75c35433c3a1945d04"
-            ).unwrap());
-            
+            checkpoints.insert(
+                500000,
+                BlockHash::from_str(
+                    "00000000000000000024fb37364cbf81fd49cc2d51c09c75c35433c3a1945d04",
+                )
+                .unwrap(),
+            );
+
             // Block 600000
-            checkpoints.insert(600000, BlockHash::from_str(
-                "00000000000000000019f112ec0a9982926f1258cdcc558dd7c3b7e5dc7fa148"
-            ).unwrap());
-            
+            checkpoints.insert(
+                600000,
+                BlockHash::from_str(
+                    "00000000000000000019f112ec0a9982926f1258cdcc558dd7c3b7e5dc7fa148",
+                )
+                .unwrap(),
+            );
+
             // Block 700000
-            checkpoints.insert(700000, BlockHash::from_str(
-                "0000000000000000000590fc0f3eba193a278534220b2b37e9849e1a770ca959"
-            ).unwrap());
+            checkpoints.insert(
+                700000,
+                BlockHash::from_str(
+                    "0000000000000000000590fc0f3eba193a278534220b2b37e9849e1a770ca959",
+                )
+                .unwrap(),
+            );
         }
         Network::Testnet => {
             // Add testnet checkpoints
             use std::str::FromStr;
-            
-            checkpoints.insert(546, BlockHash::from_str(
-                "000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70"
-            ).unwrap());
-            
-            checkpoints.insert(100000, BlockHash::from_str(
-                "00000000009e2958c15ff9290d571bf9459e93b19765c6801ddeccadbb160a1e"
-            ).unwrap());
-            
-            checkpoints.insert(200000, BlockHash::from_str(
-                "0000000000287bffd321963ef05feab753ebe274e1d78b2fd4e2bfe9ad3aa6f2"
-            ).unwrap());
+
+            checkpoints.insert(
+                546,
+                BlockHash::from_str(
+                    "000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70",
+                )
+                .unwrap(),
+            );
+
+            checkpoints.insert(
+                100000,
+                BlockHash::from_str(
+                    "00000000009e2958c15ff9290d571bf9459e93b19765c6801ddeccadbb160a1e",
+                )
+                .unwrap(),
+            );
+
+            checkpoints.insert(
+                200000,
+                BlockHash::from_str(
+                    "0000000000287bffd321963ef05feab753ebe274e1d78b2fd4e2bfe9ad3aa6f2",
+                )
+                .unwrap(),
+            );
         }
         _ => {
             // No checkpoints for regtest/signet

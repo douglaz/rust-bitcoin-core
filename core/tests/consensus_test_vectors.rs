@@ -1,12 +1,12 @@
 use anyhow::Result;
-use bitcoin::{Block, Transaction};
 use bitcoin::consensus::encode::deserialize;
 use bitcoin::hashes::hex::FromHex;
 use bitcoin::hashes::Hash;
-use bitcoin_core_lib::validation::BlockValidator;
+use bitcoin::{Block, Transaction};
 use bitcoin_core_lib::consensus::{ConsensusParams, ValidationResult};
-use bitcoin_core_lib::tx_validator::TxValidationPipeline;
 use bitcoin_core_lib::script::ScriptFlags;
+use bitcoin_core_lib::tx_validator::TxValidationPipeline;
+use bitcoin_core_lib::validation::BlockValidator;
 use std::sync::Arc;
 
 /// Test vector from Bitcoin Core for block validation
@@ -36,20 +36,20 @@ mod test_vectors {
 async fn test_genesis_block_validation() -> Result<()> {
     let genesis_bytes = Vec::<u8>::from_hex(test_vectors::GENESIS_BLOCK_HEX)?;
     let genesis_block: Block = deserialize(&genesis_bytes)?;
-    
+
     // Verify genesis block hash
     let hash = genesis_block.block_hash();
     assert_eq!(
         hash.to_string(),
         "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
     );
-    
+
     // Verify merkle root
     assert_eq!(
         genesis_block.header.merkle_root.to_string(),
         "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
     );
-    
+
     Ok(())
 }
 
@@ -57,20 +57,20 @@ async fn test_genesis_block_validation() -> Result<()> {
 async fn test_block_1_validation() -> Result<()> {
     let block_bytes = Vec::<u8>::from_hex(test_vectors::BLOCK_1_HEX)?;
     let block: Block = deserialize(&block_bytes)?;
-    
+
     // Verify block hash
     let hash = block.block_hash();
     assert_eq!(
         hash.to_string(),
         "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048"
     );
-    
+
     // Verify it references genesis
     assert_eq!(
         block.header.prev_blockhash.to_string(),
         "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
     );
-    
+
     Ok(())
 }
 
@@ -78,16 +78,16 @@ async fn test_block_1_validation() -> Result<()> {
 async fn test_valid_transaction_parsing() -> Result<()> {
     let tx_bytes = Vec::<u8>::from_hex(test_vectors::VALID_TX_1)?;
     let tx: Transaction = deserialize(&tx_bytes)?;
-    
+
     // Verify transaction structure
     assert_eq!(tx.version.0, 1);
     assert_eq!(tx.input.len(), 1);
     assert_eq!(tx.output.len(), 2);
-    
+
     // Verify TXID
     let txid = tx.compute_txid();
     assert!(txid.to_string().len() == 64); // Valid hex string
-    
+
     Ok(())
 }
 
@@ -95,7 +95,7 @@ async fn test_valid_transaction_parsing() -> Result<()> {
 async fn test_invalid_transaction_duplicate_inputs() -> Result<()> {
     let tx_bytes = Vec::<u8>::from_hex(test_vectors::INVALID_TX_DUPLICATE_INPUTS)?;
     let tx: Transaction = deserialize(&tx_bytes)?;
-    
+
     // Check for duplicate inputs manually
     let mut seen_inputs = std::collections::HashSet::new();
     for input in &tx.input {
@@ -105,7 +105,7 @@ async fn test_invalid_transaction_duplicate_inputs() -> Result<()> {
             return Ok(());
         }
     }
-    
+
     panic!("Should have detected duplicate inputs");
 }
 
@@ -113,80 +113,82 @@ async fn test_invalid_transaction_duplicate_inputs() -> Result<()> {
 async fn test_segwit_transaction_validation() -> Result<()> {
     let tx_bytes = Vec::<u8>::from_hex(test_vectors::SEGWIT_TX_HEX)?;
     let tx: Transaction = deserialize(&tx_bytes)?;
-    
+
     // Verify SegWit structure
     assert_eq!(tx.version.0, 2); // Version 2 for this transaction
-    assert!(!tx.input[0].witness.is_empty(), "SegWit tx should have witness data");
-    
+    assert!(
+        !tx.input[0].witness.is_empty(),
+        "SegWit tx should have witness data"
+    );
+
     // Verify witness structure
     let witness = &tx.input[0].witness;
     assert_eq!(witness.len(), 2); // Signature and pubkey
-    
+
     // Verify this is a SegWit transaction
     assert!(tx.is_coinbase() == false);
-    
+
     Ok(())
 }
-
 
 #[tokio::test]
 async fn test_script_validation_p2pkh() -> Result<()> {
     use bitcoin::ScriptBuf;
     use bitcoin_core_lib::script::interpreter::ScriptInterpreter;
-    
+
     let script_pubkey_bytes = Vec::<u8>::from_hex(test_vectors::P2PKH_SCRIPT_PUBKEY)?;
     let script_pubkey = ScriptBuf::from_bytes(script_pubkey_bytes);
-    
+
     let script_sig_bytes = Vec::<u8>::from_hex(test_vectors::P2PKH_SCRIPT_SIG)?;
     let script_sig = ScriptBuf::from_bytes(script_sig_bytes);
-    
+
     // Create script interpreter
     let interpreter = ScriptInterpreter::new(ScriptFlags::default());
-    
+
     // For a proper test, we'd need the full transaction context
     // This just verifies the scripts parse correctly
     assert!(script_pubkey.is_p2pkh());
     assert!(!script_sig.is_empty());
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_consensus_params_mainnet() -> Result<()> {
     let params = ConsensusParams::for_network("mainnet")?;
-    
+
     // Test mainnet consensus parameters
     assert_eq!(params.bip34_height, 227931);
     assert_eq!(params.bip65_height, 388381);
     assert_eq!(params.bip66_height, 363725);
     assert_eq!(params.segwit_height, 481824);
-    
+
     // Test activation heights
     assert!(params.is_bip34_active(230000));
     assert!(!params.is_bip34_active(200000));
-    
+
     assert!(params.is_bip65_active(400000));
     assert!(!params.is_bip65_active(300000));
-    
+
     assert!(params.is_bip66_active(370000));
     assert!(!params.is_bip66_active(350000));
-    
+
     assert!(params.is_segwit_active(500000));
     assert!(!params.is_segwit_active(400000));
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_consensus_params_testnet() -> Result<()> {
     let params = ConsensusParams::for_network("testnet")?;
-    
+
     // Test testnet consensus parameters
     assert_eq!(params.bip34_height, 21111);
     assert_eq!(params.bip65_height, 581885);
     assert_eq!(params.bip66_height, 330776);
     assert_eq!(params.segwit_height, 834624);
-    
+
     Ok(())
 }
 
@@ -195,43 +197,42 @@ async fn test_block_weight_calculation() -> Result<()> {
     // Test block weight calculation for SegWit blocks
     let tx_bytes = Vec::<u8>::from_hex(test_vectors::SEGWIT_TX_HEX)?;
     let tx: Transaction = deserialize(&tx_bytes)?;
-    
+
     let weight = tx.weight();
     assert!(weight.to_wu() > 0, "Weight should be greater than 0");
-    
+
     // For SegWit transactions:
     // Weight = (base_size * 3) + total_size
     // where base_size is tx without witness data
     // and total_size includes witness
     let total_size = tx_bytes.len();
-    
+
     // Verify weight is reasonable (between total_size and 4*total_size)
     assert!(weight.to_wu() >= total_size as u64);
     assert!(weight.to_wu() <= (total_size * 4) as u64);
-    
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_merkle_root_calculation() -> Result<()> {
     use bitcoin::merkle_tree::calculate_root;
-    
+
     let block_bytes = Vec::<u8>::from_hex(test_vectors::GENESIS_BLOCK_HEX)?;
     let block: Block = deserialize(&block_bytes)?;
-    
+
     // Calculate merkle root from transactions
-    let txids: Vec<_> = block.txdata.iter()
+    let txids: Vec<_> = block
+        .txdata
+        .iter()
         .map(|tx| tx.compute_txid().to_raw_hash())
         .collect();
-    
-    let calculated_root = calculate_root(txids.into_iter())
-        .map(|root| bitcoin::TxMerkleNode::from_raw_hash(root));
-    
-    assert_eq!(
-        calculated_root,
-        Some(block.header.merkle_root)
-    );
-    
+
+    let calculated_root =
+        calculate_root(txids.into_iter()).map(|root| bitcoin::TxMerkleNode::from_raw_hash(root));
+
+    assert_eq!(calculated_root, Some(block.header.merkle_root));
+
     Ok(())
 }
 
@@ -239,11 +240,11 @@ async fn test_merkle_root_calculation() -> Result<()> {
 #[tokio::test]
 async fn test_bip34_coinbase_height() -> Result<()> {
     use bitcoin::Transaction;
-    
+
     // Helper to create coinbase with BIP34 height
     fn create_bip34_coinbase(height: u32) -> Transaction {
         let mut script = Vec::new();
-        
+
         // Encode height per BIP34
         if height == 0 {
             script.push(0x00);
@@ -259,7 +260,7 @@ async fn test_bip34_coinbase_height() -> Result<()> {
             script.push(0x03);
             script.extend_from_slice(&height.to_le_bytes()[..3]);
         }
-        
+
         Transaction {
             version: bitcoin::transaction::Version(1),
             lock_time: bitcoin::absolute::LockTime::ZERO,
@@ -275,18 +276,18 @@ async fn test_bip34_coinbase_height() -> Result<()> {
             }],
         }
     }
-    
+
     // Test various heights
     let heights = vec![0, 1, 16, 17, 127, 128, 32767, 32768, 100000];
-    
+
     for height in heights {
         let tx = create_bip34_coinbase(height);
         assert!(tx.is_coinbase());
-        
+
         // Verify script starts with height encoding
         let script = &tx.input[0].script_sig;
         assert!(!script.is_empty());
     }
-    
+
     Ok(())
 }

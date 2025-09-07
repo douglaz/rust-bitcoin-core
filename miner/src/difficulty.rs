@@ -131,7 +131,7 @@ impl DifficultyAdjuster {
 
         // new_target = old_target * actual_timespan / target_timespan
         // If actual_timespan < target_timespan (blocks mined faster), target should decrease (difficulty increases)
-        
+
         // Multiply by actual timespan
         let adjusted = multiply_u256(current_u256, actual_timespan as u128);
 
@@ -147,32 +147,32 @@ impl DifficultyAdjuster {
     pub fn estimate_next_adjustment(&self, current_height: u32) -> f64 {
         // Find the position within the current adjustment period
         let blocks_since_adjustment = current_height % self.params.adjustment_interval;
-        
+
         if blocks_since_adjustment == 0 {
             // We're at an adjustment boundary, no estimate needed
             return 1.0;
         }
-        
+
         // Calculate expected time for blocks mined so far
         let expected_time = blocks_since_adjustment * 600; // 10 minutes per block
-        
+
         // In a real implementation, we would look at actual block timestamps
         // For now, we'll return a slight adjustment factor as an estimate
         // This would typically be calculated from:
         // actual_time_for_blocks / expected_time_for_blocks
-        
+
         // Simulate faster block production (blocks coming in 9 minutes instead of 10)
         let simulated_actual_time = blocks_since_adjustment * 540; // 9 minutes per block
-        
+
         // Adjustment factor: if blocks are faster, difficulty should increase
         // Factor > 1.0 means difficulty will increase
         // Factor < 1.0 means difficulty will decrease
         let adjustment = expected_time as f64 / simulated_actual_time as f64;
-        
+
         // Clamp to reasonable bounds
         adjustment.clamp(0.25, 4.0)
     }
-    
+
     /// Calculate the adjustment factor between two targets
     fn calculate_adjustment_factor(&self, old_target: Target, new_target: Target) -> f64 {
         // Higher target = lower difficulty
@@ -242,7 +242,7 @@ impl DifficultyStats {
 
         // Calculate current difficulty (1 / target as a fraction of max target)
         let current_difficulty = target_to_difficulty(current_target);
-        
+
         // Calculate estimated adjustment based on recent block times
         let estimated_adjustment = adjuster.estimate_next_adjustment(height);
 
@@ -312,45 +312,45 @@ fn divide_u256(a: U256, b: u128) -> U256 {
 
     // Full 256-bit division using long division algorithm
     // This properly handles the remainder from high part division
-    
+
     // First divide the high part
     let high_quotient = a[1] / b;
     let high_remainder = a[1] % b;
-    
+
     // Now we need to divide (high_remainder * 2^128 + a[0]) by b
     // This is tricky because high_remainder * 2^128 can overflow u128
-    
+
     // We'll use a different approach: convert to bigger chunks for division
     // Split into smaller operations to avoid overflow
-    
+
     // Calculate how many times b fits into the remainder shifted by 128 bits
     // We do this by calculating (remainder * 2^64) / b twice
-    
+
     // First, calculate remainder * 2^64 / b
     let remainder_shifted = high_remainder << 64; // This won't overflow since remainder < b
     let mid_quotient = remainder_shifted / b;
     let mid_remainder = remainder_shifted % b;
-    
+
     // Now we have: original = high_quotient * b * 2^128 + mid_quotient * b * 2^64 + mid_remainder * 2^64 + a[0]
     // We need to divide (mid_remainder * 2^64 + a[0]) by b
-    
+
     // Split a[0] into high and low 64-bit parts for easier handling
     let a0_high = a[0] >> 64;
     let a0_low = a[0] & ((1u128 << 64) - 1);
-    
+
     // Combine mid_remainder with a0_high
     let combined_high = mid_remainder + a0_high;
     let high_part_quotient = combined_high / b;
     let high_part_remainder = combined_high % b;
-    
+
     // Finally divide the last part
     let final_dividend = (high_part_remainder << 64) + a0_low;
     let low_part_quotient = final_dividend / b;
-    
+
     // Combine all parts: result = mid_quotient * 2^64 + high_part_quotient * 2^64 + low_part_quotient
     // Simplify: result = (mid_quotient + high_part_quotient) * 2^64 + low_part_quotient
     let low_result = (mid_quotient << 64) + (high_part_quotient << 64) + low_part_quotient;
-    
+
     [low_result, high_quotient]
 }
 

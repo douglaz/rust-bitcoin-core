@@ -1,13 +1,13 @@
 use anyhow::{bail, Result};
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::hashes::Hash;
-use bitcoin::{BlockHash, Transaction, VarInt};
 use bitcoin::io::{Read, Write};
+use bitcoin::{BlockHash, Transaction, VarInt};
 
+use crate::compact_block_protocol::SendCmpct;
 use crate::compact_blocks::{
     BlockTxn, CompactBlock, CompactBlockHeader, GetBlockTxn, PrefilledTransaction, ShortTxId,
 };
-use crate::compact_block_protocol::SendCmpct;
 
 /// Wire protocol serialization for BIP152 Compact Blocks
 
@@ -21,11 +21,13 @@ impl Encodable for SendCmpct {
 }
 
 impl Decodable for SendCmpct {
-    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, bitcoin::consensus::encode::Error> {
+    fn consensus_decode<R: Read + ?Sized>(
+        r: &mut R,
+    ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let high_bandwidth_byte = u8::consensus_decode(r)?;
         let high_bandwidth = high_bandwidth_byte != 0;
         let version = u64::consensus_decode(r)?;
-        
+
         Ok(SendCmpct {
             high_bandwidth,
             version,
@@ -40,7 +42,9 @@ impl Encodable for ShortTxId {
 }
 
 impl Decodable for ShortTxId {
-    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, bitcoin::consensus::encode::Error> {
+    fn consensus_decode<R: Read + ?Sized>(
+        r: &mut R,
+    ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let mut bytes = [0u8; 6];
         r.read_exact(&mut bytes)?;
         Ok(ShortTxId(bytes))
@@ -58,10 +62,12 @@ impl Encodable for PrefilledTransaction {
 }
 
 impl Decodable for PrefilledTransaction {
-    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, bitcoin::consensus::encode::Error> {
+    fn consensus_decode<R: Read + ?Sized>(
+        r: &mut R,
+    ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let index = VarInt::consensus_decode(r)?.0 as u16;
         let tx = Transaction::consensus_decode(r)?;
-        
+
         Ok(PrefilledTransaction { index, tx })
     }
 }
@@ -76,10 +82,12 @@ impl Encodable for CompactBlockHeader {
 }
 
 impl Decodable for CompactBlockHeader {
-    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, bitcoin::consensus::encode::Error> {
+    fn consensus_decode<R: Read + ?Sized>(
+        r: &mut R,
+    ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let header = bitcoin::block::Header::consensus_decode(r)?;
         let nonce = u64::consensus_decode(r)?;
-        
+
         Ok(CompactBlockHeader { header, nonce })
     }
 }
@@ -88,41 +96,43 @@ impl Encodable for CompactBlock {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, bitcoin::io::Error> {
         let mut len = 0;
         len += self.header.consensus_encode(w)?;
-        
+
         // Encode short IDs count and list
         len += VarInt(self.short_ids.len() as u64).consensus_encode(w)?;
         for short_id in &self.short_ids {
             len += short_id.consensus_encode(w)?;
         }
-        
+
         // Encode prefilled transactions count and list
         len += VarInt(self.prefilled_txs.len() as u64).consensus_encode(w)?;
         for prefilled in &self.prefilled_txs {
             len += prefilled.consensus_encode(w)?;
         }
-        
+
         Ok(len)
     }
 }
 
 impl Decodable for CompactBlock {
-    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, bitcoin::consensus::encode::Error> {
+    fn consensus_decode<R: Read + ?Sized>(
+        r: &mut R,
+    ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let header = CompactBlockHeader::consensus_decode(r)?;
-        
+
         // Decode short IDs
         let short_ids_count = VarInt::consensus_decode(r)?.0 as usize;
         let mut short_ids = Vec::with_capacity(short_ids_count);
         for _ in 0..short_ids_count {
             short_ids.push(ShortTxId::consensus_decode(r)?);
         }
-        
+
         // Decode prefilled transactions
         let prefilled_count = VarInt::consensus_decode(r)?.0 as usize;
         let mut prefilled_txs = Vec::with_capacity(prefilled_count);
         for _ in 0..prefilled_count {
             prefilled_txs.push(PrefilledTransaction::consensus_decode(r)?);
         }
-        
+
         Ok(CompactBlock {
             header,
             short_ids,
@@ -135,29 +145,31 @@ impl Encodable for GetBlockTxn {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, bitcoin::io::Error> {
         let mut len = 0;
         len += self.block_hash.consensus_encode(w)?;
-        
+
         // Encode indexes using differential encoding
         len += VarInt(self.indexes.len() as u64).consensus_encode(w)?;
-        
+
         let mut last_index = 0u16;
         for &index in &self.indexes {
             let diff = index - last_index;
             len += VarInt(diff as u64).consensus_encode(w)?;
             last_index = index + 1; // Next diff is relative to index + 1
         }
-        
+
         Ok(len)
     }
 }
 
 impl Decodable for GetBlockTxn {
-    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, bitcoin::consensus::encode::Error> {
+    fn consensus_decode<R: Read + ?Sized>(
+        r: &mut R,
+    ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let block_hash = BlockHash::consensus_decode(r)?;
-        
+
         // Decode indexes using differential encoding
         let count = VarInt::consensus_decode(r)?.0 as usize;
         let mut indexes = Vec::with_capacity(count);
-        
+
         let mut last_index = 0u16;
         for _ in 0..count {
             let diff = VarInt::consensus_decode(r)?.0 as u16;
@@ -165,7 +177,7 @@ impl Decodable for GetBlockTxn {
             indexes.push(last_index);
             last_index += 1; // Next diff is relative to index + 1
         }
-        
+
         Ok(GetBlockTxn {
             block_hash,
             indexes,
@@ -177,28 +189,30 @@ impl Encodable for BlockTxn {
     fn consensus_encode<W: Write + ?Sized>(&self, w: &mut W) -> Result<usize, bitcoin::io::Error> {
         let mut len = 0;
         len += self.block_hash.consensus_encode(w)?;
-        
+
         // Encode transactions
         len += VarInt(self.transactions.len() as u64).consensus_encode(w)?;
         for tx in &self.transactions {
             len += tx.consensus_encode(w)?;
         }
-        
+
         Ok(len)
     }
 }
 
 impl Decodable for BlockTxn {
-    fn consensus_decode<R: Read + ?Sized>(r: &mut R) -> Result<Self, bitcoin::consensus::encode::Error> {
+    fn consensus_decode<R: Read + ?Sized>(
+        r: &mut R,
+    ) -> Result<Self, bitcoin::consensus::encode::Error> {
         let block_hash = BlockHash::consensus_decode(r)?;
-        
+
         // Decode transactions
         let count = VarInt::consensus_decode(r)?.0 as usize;
         let mut transactions = Vec::with_capacity(count);
         for _ in 0..count {
             transactions.push(Transaction::consensus_decode(r)?);
         }
-        
+
         Ok(BlockTxn {
             block_hash,
             transactions,
@@ -224,7 +238,8 @@ pub fn deserialize_sendcmpct(data: &[u8]) -> Result<SendCmpct> {
 /// Serialize CompactBlock to bytes
 pub fn serialize_compact_block(block: &CompactBlock) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    block.consensus_encode(&mut bytes)
+    block
+        .consensus_encode(&mut bytes)
         .map_err(|e| anyhow::anyhow!("Failed to serialize CompactBlock: {}", e))?;
     Ok(bytes)
 }

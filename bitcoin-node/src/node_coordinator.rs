@@ -214,14 +214,14 @@ impl NodeCoordinator {
             let rpc_addr = format!("{}:{}", config.rpc_bind, config.rpc_port)
                 .parse()
                 .unwrap_or_else(|_| "127.0.0.1:8332".parse().unwrap());
-            
+
             // RPC server needs ChainManager wrapped in RwLock
             let chain_for_rpc = Arc::new(RwLock::new(
                 ChainManager::new(storage.clone(), network_str.clone())
                     .await
-                    .context("Failed to initialize chain manager for RPC")?
+                    .context("Failed to initialize chain manager for RPC")?,
             ));
-            
+
             Some(Arc::new(rpc::simple_server::SimpleRpcServer::new(
                 rpc_addr,
                 chain_for_rpc,
@@ -236,7 +236,7 @@ impl NodeCoordinator {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
 
         let network = config.network;
-        
+
         Ok(Self {
             config,
             network,
@@ -276,7 +276,7 @@ impl NodeCoordinator {
                     }
                 }
             });
-            
+
             // Store handle if needed for cleanup
             // For now, we let it run in the background
             info!("RPC server starting...");
@@ -431,7 +431,9 @@ impl NodeCoordinator {
                 if self.config.tx_index_enabled {
                     // Get block time from the header
                     let block_time = block.header.time;
-                    self.tx_index.index_block(&block, height, block_time).await?;
+                    self.tx_index
+                        .index_block(&block, height, block_time)
+                        .await?;
                 }
 
                 // Remove mined transactions from mempool
@@ -467,7 +469,11 @@ impl NodeCoordinator {
                 stats.mempool_size = self.mempool.read().await.size();
 
                 // Broadcast to peers
-                self.network_manager.lock().await.broadcast_transaction(&tx).await?;
+                self.network_manager
+                    .lock()
+                    .await
+                    .broadcast_transaction(&tx)
+                    .await?;
 
                 debug!("Transaction {} added to mempool", txid);
             }
@@ -485,13 +491,13 @@ impl NodeCoordinator {
         // a pending transaction queue in the wallet module.
         // For now, transactions can be submitted via RPC sendrawtransaction
         // which adds them directly to the mempool.
-        
+
         // This method would:
         // 1. Check wallet for any pending transactions
         // 2. Validate each transaction
         // 3. Add valid transactions to mempool
         // 4. Broadcast to peers
-        
+
         // Currently handled through RPC interface
         Ok(())
     }
@@ -554,15 +560,15 @@ impl NodeCoordinator {
         debug!("Running mempool cleanup");
 
         let mut mempool = self.mempool.write().await;
-        
+
         // Remove transactions older than 2 weeks (14 days)
         const MAX_AGE_SECONDS: u64 = 14 * 24 * 60 * 60;
         let expired_count = mempool.remove_expired_transactions(MAX_AGE_SECONDS).await?;
-        
+
         // Evict low-fee transactions if mempool is too large
         const MAX_MEMPOOL_SIZE: usize = 300_000; // Max 300k transactions
         let evicted_count = mempool.evict_by_feerate(MAX_MEMPOOL_SIZE).await?;
-        
+
         if expired_count > 0 || evicted_count > 0 {
             info!(
                 "Mempool cleanup: removed {} expired, evicted {} low-fee transactions",

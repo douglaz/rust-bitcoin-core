@@ -292,7 +292,7 @@ impl WalletStorage {
         // Validate backup version
         if backup.version != 1 {
             return Err(crate::error::WalletError::Other(anyhow::anyhow!(
-                "Unsupported backup version: {}", 
+                "Unsupported backup version: {}",
                 backup.version
             )));
         }

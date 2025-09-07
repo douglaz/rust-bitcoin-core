@@ -235,7 +235,7 @@ impl TransactionValidator {
                     trace!("BIP113 not active, using block time for locktime comparison");
                     self.block_time
                 };
-                
+
                 if locktime > comparison_time {
                     bail!(
                         "Transaction locktime {} not reached (comparison time: {})",
@@ -259,29 +259,29 @@ impl TransactionValidator {
         if tx.version.0 < 2 {
             return Ok(());
         }
-        
+
         // First validate that the sequence numbers are valid
         bip68::validate_sequence_numbers(tx)?;
-        
+
         // Build arrays of prevout heights and times for BIP68 checking
         let mut prevout_heights = Vec::with_capacity(tx.input.len());
         let mut prevout_times = Vec::with_capacity(tx.input.len());
-        
+
         for input in &tx.input {
             // Get the height when this output was created
             let spent_height = spent_outputs
                 .get(&input.previous_output)
                 .copied()
                 .unwrap_or(0);
-            
+
             // For now, use block height as a proxy for time
             // In a real implementation, we'd need the actual block time
             let spent_time = spent_height * 600; // Approximate 10 minutes per block
-            
+
             prevout_heights.push(spent_height);
             prevout_times.push(spent_time);
         }
-        
+
         // Check if all sequence locks are satisfied
         let locks_satisfied = bip68::check_sequence_locks(
             tx,
@@ -290,11 +290,11 @@ impl TransactionValidator {
             self.block_height,
             self.block_time,
         )?;
-        
+
         if !locks_satisfied {
             bail!("BIP68 sequence locks not satisfied for transaction");
         }
-        
+
         Ok(())
     }
 

@@ -387,43 +387,44 @@ impl SegWitValidator {
         }
 
         // Full witness script execution implementation
-        use crate::script::{ScriptInterpreter, TransactionSignatureChecker};
         use crate::script::ScriptFlags;
-        
-        let checker = TransactionSignatureChecker::new(tx, input_index, amount.to_sat(), prevouts.to_vec());
-        
+        use crate::script::{ScriptInterpreter, TransactionSignatureChecker};
+
+        let checker =
+            TransactionSignatureChecker::new(tx, input_index, amount.to_sat(), prevouts.to_vec());
+
         // Create script interpreter with witness flags
         let mut script_flags = ScriptFlags::WITNESS;
-        
+
         // Add standard validation flags
         script_flags |= ScriptFlags::CHECKLOCKTIMEVERIFY;
         script_flags |= ScriptFlags::CHECKSEQUENCEVERIFY;
         script_flags |= ScriptFlags::NULLDUMMY;
-        
+
         if _flags.discourage_upgradable_witness {
             script_flags |= ScriptFlags::DISCOURAGE_UPGRADEABLE_WITNESS_PROGRAM;
         }
-        
+
         let mut interpreter = ScriptInterpreter::new(script_flags);
-        
+
         // Push initial stack items from witness
         for item in stack {
             interpreter.push_stack(item.clone())?;
         }
-        
+
         // Execute the witness script
         interpreter.execute(script, &checker)?;
-        
+
         // Check final stack - must have exactly one true value
         if interpreter.stack_size() != 1 {
             bail!("Witness script must leave exactly one item on stack");
         }
-        
+
         let top = interpreter.pop_stack()?;
         if !Self::cast_to_bool(&top) {
             bail!("Witness script evaluated to false");
         }
-        
+
         debug!("Witness script execution completed successfully");
 
         Ok(())
@@ -435,7 +436,7 @@ impl SegWitValidator {
         if item.is_empty() {
             return false;
         }
-        
+
         // Array of all zeros (any length) is false
         for &byte in item {
             if byte != 0 {
@@ -446,10 +447,10 @@ impl SegWitValidator {
                 return true;
             }
         }
-        
+
         false
     }
-    
+
     /// Verify ECDSA signature
     fn verify_ecdsa_signature(
         &self,

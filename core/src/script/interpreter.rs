@@ -46,7 +46,7 @@ impl ScriptInterpreter {
                     InstructionError::EarlyEndOfScript => {
                         // This usually means a push opcode claimed to push more bytes than available
                         ScriptError::PushSize
-                    },
+                    }
                     InstructionError::NumericOverflow => ScriptError::NumberOverflow,
                     _ => ScriptError::BadOpcode,
                 }
@@ -704,18 +704,18 @@ impl ScriptInterpreter {
             _ => Err(ScriptError::BadOpcode),
         }
     }
-    
+
     /// Push an item onto the stack
     pub fn push_stack(&mut self, item: Vec<u8>) -> ScriptResult<()> {
         self.stack.push(item)?;
         Ok(())
     }
-    
+
     /// Pop an item from the stack
     pub fn pop_stack(&mut self) -> ScriptResult<Vec<u8>> {
         self.stack.pop()
     }
-    
+
     /// Get the size of the stack
     pub fn stack_size(&self) -> usize {
         self.stack.len()

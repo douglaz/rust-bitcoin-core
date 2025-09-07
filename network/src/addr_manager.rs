@@ -104,7 +104,7 @@ impl AddrInfo {
             if age_days > 30 {
                 return true;
             }
-            
+
             // Remove if too many failed attempts
             if self.attempts >= 10 {
                 return true;
@@ -168,19 +168,19 @@ impl AddrBucket {
 pub struct AddrManager {
     /// Network
     network: Network,
-    
+
     /// New addresses (not yet tried)
     new_table: Vec<AddrBucket>,
-    
+
     /// Tried addresses (successfully connected)
     tried_table: Vec<AddrBucket>,
-    
+
     /// Map from address to location in tables
     addr_index: HashMap<SocketAddr, (bool, usize)>, // (in_tried, bucket_id)
-    
+
     /// Random key for bucket selection
     key: [u8; 32],
-    
+
     /// Statistics
     stats: AddrStats,
 }
@@ -197,11 +197,11 @@ impl AddrManager {
     pub fn new(network: Network) -> Self {
         let mut new_table = Vec::with_capacity(NEW_BUCKET_COUNT);
         let mut tried_table = Vec::with_capacity(TRIED_BUCKET_COUNT);
-        
+
         for _ in 0..NEW_BUCKET_COUNT {
             new_table.push(AddrBucket::default());
         }
-        
+
         for _ in 0..TRIED_BUCKET_COUNT {
             tried_table.push(AddrBucket::default());
         }
@@ -230,9 +230,9 @@ impl AddrManager {
         addr.hash(&mut hasher);
         self.key.hash(&mut hasher);
         in_tried.hash(&mut hasher);
-        
+
         let hash = hasher.finish();
-        
+
         if in_tried {
             (hash as usize) % TRIED_BUCKET_COUNT
         } else {
@@ -256,7 +256,7 @@ impl AddrManager {
                 } else {
                     &mut self.new_table[*bucket_id]
                 };
-                
+
                 if let Some(info) = bucket.find_mut(&addr) {
                     info.timestamp = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
@@ -270,7 +270,7 @@ impl AddrManager {
 
         let info = AddrInfo::new(addr, source, services);
         let bucket_id = self.calculate_bucket(&addr, false);
-        
+
         if self.new_table[bucket_id].add(info, NEW_BUCKET_SIZE) {
             self.addr_index.insert(addr, (false, bucket_id));
             self.stats.new_count += 1;
@@ -299,15 +299,19 @@ impl AddrManager {
                 }
             } else {
                 // Move from new to tried
-                if let Some(pos) = self.new_table[bucket_id].addrs.iter().position(|a| a.addr == addr) {
+                if let Some(pos) = self.new_table[bucket_id]
+                    .addrs
+                    .iter()
+                    .position(|a| a.addr == addr)
+                {
                     let mut info = self.new_table[bucket_id].addrs.remove(pos);
                     info.last_success = Some(now);
                     info.last_try = Some(now);
                     info.attempts = 0;
                     info.in_tried = true;
-                    
+
                     let tried_bucket_id = self.calculate_bucket(&addr, true);
-                    
+
                     if self.tried_table[tried_bucket_id].add(info, TRIED_BUCKET_SIZE) {
                         self.addr_index.insert(addr, (true, tried_bucket_id));
                         self.stats.new_count -= 1;
@@ -332,7 +336,7 @@ impl AddrManager {
             } else {
                 &mut self.new_table[*bucket_id]
             };
-            
+
             if let Some(info) = bucket.find_mut(&addr) {
                 info.last_try = Some(now);
                 info.attempts += 1;
@@ -345,7 +349,7 @@ impl AddrManager {
         let mut selected = Vec::new();
         let mut tried_buckets: Vec<usize> = (0..TRIED_BUCKET_COUNT).collect();
         let mut new_buckets: Vec<usize> = (0..NEW_BUCKET_COUNT).collect();
-        
+
         // Shuffle buckets
         use rand::seq::SliceRandom;
         let mut rng = rand::thread_rng();
@@ -357,7 +361,7 @@ impl AddrManager {
             if selected.len() >= count {
                 break;
             }
-            
+
             let bucket = &self.tried_table[bucket_id];
             for info in &bucket.addrs {
                 if selected.len() >= count {
@@ -373,7 +377,7 @@ impl AddrManager {
                 if selected.len() >= count {
                     break;
                 }
-                
+
                 let bucket = &self.new_table[bucket_id];
                 for info in &bucket.addrs {
                     if selected.len() >= count {
@@ -395,7 +399,7 @@ impl AddrManager {
             .as_secs();
 
         let mut candidates = Vec::new();
-        
+
         // Collect all addresses with their selection chance
         for bucket in &self.tried_table {
             for info in &bucket.addrs {
@@ -403,7 +407,7 @@ impl AddrManager {
                 candidates.push((info.clone(), chance));
             }
         }
-        
+
         for bucket in &self.new_table {
             for info in &bucket.addrs {
                 let chance = info.get_selection_chance(now);
@@ -415,11 +419,12 @@ impl AddrManager {
         candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
         // Take top addresses
-        candidates.into_iter()
+        candidates
+            .into_iter()
             .take(max_count.min(MAX_GETADDR_RESPONSE))
             .map(|(info, _)| {
                 let timestamp = info.timestamp as u32;
-                
+
                 // Convert IP address to [u16; 8] format
                 let address = match info.addr.ip() {
                     IpAddr::V4(ipv4) => {
@@ -435,7 +440,7 @@ impl AddrManager {
                         segments
                     }
                 };
-                
+
                 let addr = bitcoin::p2p::address::Address {
                     services: ServiceFlags::from(info.services),
                     address,
@@ -489,7 +494,7 @@ impl AddrManager {
                 self.stats.new_count -= 1;
                 &mut self.new_table[bucket_id]
             };
-            
+
             self.stats.total_count -= 1;
             bucket.remove(addr);
             true
@@ -501,12 +506,8 @@ impl AddrManager {
     /// Check if address is local
     fn is_local(&self, addr: &SocketAddr) -> bool {
         match addr.ip() {
-            IpAddr::V4(ip) => {
-                ip.is_loopback() || ip.is_private() || ip.is_link_local()
-            }
-            IpAddr::V6(ip) => {
-                ip.is_loopback() || ip.is_unique_local()
-            }
+            IpAddr::V4(ip) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+            IpAddr::V6(ip) => ip.is_loopback() || ip.is_unique_local(),
         }
     }
 
@@ -536,9 +537,9 @@ impl Serialize for AddrManager {
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        
+
         let mut state = serializer.serialize_struct("AddrManager", 3)?;
-        
+
         // Collect all addresses
         let mut addrs = Vec::new();
         for bucket in &self.new_table {
@@ -547,7 +548,7 @@ impl Serialize for AddrManager {
         for bucket in &self.tried_table {
             addrs.extend(bucket.addrs.clone());
         }
-        
+
         state.serialize_field("network", &self.network)?;
         state.serialize_field("addrs", &addrs)?;
         state.serialize_field("key", &self.key)?;
@@ -566,15 +567,15 @@ impl<'de> Deserialize<'de> for AddrManager {
             addrs: Vec<AddrInfo>,
             key: [u8; 32],
         }
-        
+
         let data = AddrManagerData::deserialize(deserializer)?;
         let mut manager = AddrManager::new(data.network);
         manager.key = data.key;
-        
+
         // Re-add all addresses
         for info in data.addrs {
             manager.add(info.addr, info.source, ServiceFlags::from(info.services));
-            
+
             // Restore state
             if info.in_tried {
                 manager.mark_good(info.addr);
@@ -585,7 +586,7 @@ impl<'de> Deserialize<'de> for AddrManager {
                 }
             }
         }
-        
+
         Ok(manager)
     }
 }

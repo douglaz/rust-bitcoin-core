@@ -91,8 +91,13 @@ impl Wallet {
             fingerprint: None,
         };
         let wallet_passphrase = crate::encryption::Passphrase::from_string(passphrase.to_string());
-        let encryptor =
-            WalletEncryption::create_with_seed(wallet_file, wallet_passphrase, &seed, wallet_metadata).await?;
+        let encryptor = WalletEncryption::create_with_seed(
+            wallet_file,
+            wallet_passphrase,
+            &seed,
+            wallet_metadata,
+        )
+        .await?;
 
         Ok(Self {
             name,
@@ -740,7 +745,10 @@ impl Wallet {
             Ok((total_input - total_output).to_sat())
         } else {
             // This shouldn't happen in valid transactions
-            warn!("Transaction outputs exceed inputs: {} > {}", total_output, total_input);
+            warn!(
+                "Transaction outputs exceed inputs: {} > {}",
+                total_output, total_input
+            );
             Ok(0)
         }
     }

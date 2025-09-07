@@ -56,7 +56,7 @@ pub struct NetworkManager {
 
     /// DoS protection manager
     dos_protection: Arc<DosProtectionManager>,
-    
+
     /// Peer manager for scoring and banning
     peer_manager: Arc<PeerManager>,
 }
@@ -163,15 +163,17 @@ impl NetworkManager {
 
         // Store peer
         self.peers.write().await.insert(addr, peer.clone());
-        
+
         // Add to peer manager for scoring
-        self.peer_manager.add_peer(
-            addr,
-            Arc::new(peer),
-            true, // assuming outbound for now
-            self.services,
-            self.best_height,
-        ).await?;
+        self.peer_manager
+            .add_peer(
+                addr,
+                Arc::new(peer),
+                true, // assuming outbound for now
+                self.services,
+                self.best_height,
+            )
+            .await?;
 
         // Spawn message handling tasks
         let chain = self.sync_manager.chain();
@@ -214,21 +216,21 @@ impl NetworkManager {
     /// Run maintenance loop for network operations
     async fn run_maintenance_loop(&self) {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
-        
+
         loop {
             interval.tick().await;
-            
+
             // Maintain peer connections
             let peer_count = self.peers.read().await.len();
             info!("Network maintenance: {} peers connected", peer_count);
-            
+
             // Try to connect to more peers if needed
             if peer_count < self.max_peers {
                 if let Err(e) = self.connect_to_peers().await {
                     warn!("Failed to connect to new peers: {}", e);
                 }
             }
-            
+
             // Clean up disconnected peers
             let peers_read = self.peers.read().await;
             let mut disconnected = Vec::new();
@@ -238,16 +240,16 @@ impl NetworkManager {
                 }
             }
             drop(peers_read);
-            
+
             let mut peers = self.peers.write().await;
-            
+
             for addr in disconnected {
                 info!("Removing disconnected peer: {}", addr);
                 peers.remove(&addr);
                 self.dos_protection.unregister_connection(&addr).await;
                 self.peer_manager.remove_peer(&addr);
             }
-            
+
             // Periodic DNS discovery if we have few peers
             if peer_count < self.max_peers / 2 {
                 info!("Running periodic DNS discovery");
@@ -405,13 +407,13 @@ impl NetworkManager {
         let peers = self.peers.read().await;
         let mut total_sent = 0u64;
         let mut total_received = 0u64;
-        
+
         for peer in peers.values() {
             let stats = peer.stats().await;
             total_sent += stats.bytes_sent;
             total_received += stats.bytes_received;
         }
-        
+
         (total_sent, total_received)
     }
 
@@ -671,7 +673,9 @@ impl NetworkManager {
                 Message::Verack => {
                     info!("Received verack from {}, handshake complete", peer_addr);
                     // Update peer score for successful handshake
-                    let _ = peer_manager.update_score(&peer_addr, ScoreEvent::SuccessfulHandshake).await;
+                    let _ = peer_manager
+                        .update_score(&peer_addr, ScoreEvent::SuccessfulHandshake)
+                        .await;
                 }
                 Message::Ping(nonce) => {
                     debug!("Received ping from {}", peer_addr);
@@ -715,13 +719,17 @@ impl NetworkManager {
                                 status
                             );
                             // Update peer score for valid block
-                            let _ = peer_manager.update_score(&peer_addr, ScoreEvent::ValidBlock).await;
+                            let _ = peer_manager
+                                .update_score(&peer_addr, ScoreEvent::ValidBlock)
+                                .await;
                             let _ = relay_manager.relay_block(&block).await;
                         }
                         Err(e) => {
                             warn!("Failed to process block from {}: {}", peer_addr, e);
                             // Update peer score for invalid block
-                            let _ = peer_manager.update_score(&peer_addr, ScoreEvent::InvalidBlock).await;
+                            let _ = peer_manager
+                                .update_score(&peer_addr, ScoreEvent::InvalidBlock)
+                                .await;
                         }
                     }
                 }
@@ -735,14 +743,18 @@ impl NetworkManager {
                             Ok(()) => {
                                 info!("Added transaction {} to mempool from {}", txid, peer_addr);
                                 // Update peer score for valid transaction
-                                let _ = peer_manager.update_score(&peer_addr, ScoreEvent::ValidTransaction).await;
+                                let _ = peer_manager
+                                    .update_score(&peer_addr, ScoreEvent::ValidTransaction)
+                                    .await;
                                 // Relay to other peers
                                 let _ = relay_manager.relay_transaction(&tx).await;
                             }
                             Err(e) => {
                                 debug!("Failed to add transaction {} to mempool: {}", txid, e);
                                 // Update peer score for invalid transaction
-                                let _ = peer_manager.update_score(&peer_addr, ScoreEvent::InvalidTransaction).await;
+                                let _ = peer_manager
+                                    .update_score(&peer_addr, ScoreEvent::InvalidTransaction)
+                                    .await;
                             }
                         }
                     } else {
@@ -942,28 +954,39 @@ impl NetworkManager {
                 }
                 // BIP152 Compact Block messages
                 Message::SendCompact(send_compact) => {
-                    info!("Peer {} supports compact blocks version {}, high_bandwidth: {}", 
-                         peer_addr, send_compact.version, send_compact.high_bandwidth);
+                    info!(
+                        "Peer {} supports compact blocks version {}, high_bandwidth: {}",
+                        peer_addr, send_compact.version, send_compact.high_bandwidth
+                    );
                     // Store peer's compact block preferences
                     if let Some(peer) = peers.read().await.get(&peer_addr) {
                         // Could store this in peer state for future use
                     }
                 }
                 Message::CompactBlock(compact_block) => {
-                    info!("Received compact block {} from {}", 
-                         compact_block.header.header.block_hash(), peer_addr);
-                    
+                    info!(
+                        "Received compact block {} from {}",
+                        compact_block.header.header.block_hash(),
+                        peer_addr
+                    );
+
                     if let Some(ref protocol) = compact_protocol {
                         // Process compact block through protocol handler
-                        match protocol.handle_cmpctblock(&peer_addr.to_string(), compact_block).await {
+                        match protocol
+                            .handle_cmpctblock(&peer_addr.to_string(), compact_block)
+                            .await
+                        {
                             Ok(messages) => {
                                 // Handle response messages
                                 for message in messages {
                                     match message {
                                         Message::Block(block) => {
                                             // Successfully reconstructed block
-                                            info!("Reconstructed block {} from compact block", block.block_hash());
-                                            
+                                            info!(
+                                                "Reconstructed block {} from compact block",
+                                                block.block_hash()
+                                            );
+
                                             // Process the block through chain manager
                                             match chain.process_block(block.clone()).await {
                                                 Ok(status) => {
@@ -974,7 +997,10 @@ impl NetworkManager {
                                                     }
                                                 }
                                                 Err(e) => {
-                                                    warn!("Failed to process reconstructed block: {}", e);
+                                                    warn!(
+                                                        "Failed to process reconstructed block: {}",
+                                                        e
+                                                    );
                                                 }
                                             }
                                         }
@@ -983,7 +1009,10 @@ impl NetworkManager {
                                             let peers_guard = peers.read().await;
                                             if let Some(peer) = peers_guard.get(&peer_addr) {
                                                 if let Err(e) = peer.send_message(other).await {
-                                                    warn!("Failed to send response to {}: {}", peer_addr, e);
+                                                    warn!(
+                                                        "Failed to send response to {}: {}",
+                                                        peer_addr, e
+                                                    );
                                                 }
                                             }
                                         }
@@ -999,9 +1028,13 @@ impl NetworkManager {
                     }
                 }
                 Message::GetBlockTxn(get_block_txn) => {
-                    debug!("Peer {} requesting {} transactions for block {}", 
-                          peer_addr, get_block_txn.indexes.len(), get_block_txn.block_hash);
-                    
+                    debug!(
+                        "Peer {} requesting {} transactions for block {}",
+                        peer_addr,
+                        get_block_txn.indexes.len(),
+                        get_block_txn.block_hash
+                    );
+
                     // Fetch the block and send requested transactions
                     if let Ok(Some(block)) = chain.get_block(&get_block_txn.block_hash).await {
                         let mut transactions = Vec::new();
@@ -1010,13 +1043,13 @@ impl NetworkManager {
                                 transactions.push(tx.clone());
                             }
                         }
-                        
+
                         if !transactions.is_empty() {
                             let block_txn = crate::compact_blocks::BlockTxn {
                                 block_hash: get_block_txn.block_hash,
                                 transactions,
                             };
-                            
+
                             if let Some(peer) = peers.read().await.get(&peer_addr) {
                                 let _ = peer.send_message(Message::BlockTxn(block_txn)).await;
                             }
@@ -1024,22 +1057,35 @@ impl NetworkManager {
                     }
                 }
                 Message::BlockTxn(block_txn) => {
-                    info!("Received {} transactions for compact block {} from {}", 
-                         block_txn.transactions.len(), block_txn.block_hash, peer_addr);
-                    
+                    info!(
+                        "Received {} transactions for compact block {} from {}",
+                        block_txn.transactions.len(),
+                        block_txn.block_hash,
+                        peer_addr
+                    );
+
                     if let Some(ref protocol) = compact_protocol {
                         // Add received transactions to compact block
-                        match protocol.add_transactions(block_txn.block_hash, block_txn.transactions).await {
+                        match protocol
+                            .add_transactions(block_txn.block_hash, block_txn.transactions)
+                            .await
+                        {
                             Ok(Some(block)) => {
                                 // Successfully reconstructed block
-                                info!("Reconstructed block {} with received transactions", block.block_hash());
-                                
+                                info!(
+                                    "Reconstructed block {} with received transactions",
+                                    block.block_hash()
+                                );
+
                                 // Process the block
                                 match chain.process_block(block.clone()).await {
                                     Ok(status) => {
                                         info!("Processed reconstructed block: {:?}", status);
                                         // Relay to other peers if accepted
-                                        if matches!(status, bitcoin_core_lib::chain::BlockStatus::InActiveChain) {
+                                        if matches!(
+                                            status,
+                                            bitcoin_core_lib::chain::BlockStatus::InActiveChain
+                                        ) {
                                             relay_manager.relay_block(&block).await;
                                         }
                                     }
@@ -1062,7 +1108,7 @@ impl NetworkManager {
                         "Received SendCompact from {}: high_bandwidth={}, version={}",
                         peer_addr, sendcmpct.high_bandwidth, sendcmpct.version
                     );
-                    
+
                     // Update compact block protocol state for this peer
                     if let Some(ref protocol) = compact_protocol {
                         // Process the SendCompact message
@@ -1070,10 +1116,10 @@ impl NetworkManager {
                             high_bandwidth: sendcmpct.high_bandwidth,
                             version: sendcmpct.version,
                         };
-                        if let Err(e) = protocol.handle_sendcmpct(
-                            &peer_addr.to_string(),
-                            sendcmpct_msg,
-                        ).await {
+                        if let Err(e) = protocol
+                            .handle_sendcmpct(&peer_addr.to_string(), sendcmpct_msg)
+                            .await
+                        {
                             warn!("Failed to handle SendCompact from {}: {}", peer_addr, e);
                         } else {
                             // If this is version 1 and we support it, send our own SendCompact
@@ -1083,11 +1129,13 @@ impl NetworkManager {
                                     high_bandwidth: false, // Start with low bandwidth mode
                                     version: 1,
                                 };
-                                
+
                                 // Get the peer to send response
                                 let peers_guard = peers.read().await;
                                 if let Some(peer) = peers_guard.get(&peer_addr) {
-                                    if let Err(e) = peer.send_message(Message::SendCompact(our_sendcmpct)).await {
+                                    if let Err(e) =
+                                        peer.send_message(Message::SendCompact(our_sendcmpct)).await
+                                    {
                                         warn!("Failed to send SendCompact to {}: {}", peer_addr, e);
                                     }
                                 }

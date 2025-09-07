@@ -290,7 +290,7 @@ pub fn calculate_package_info(
 
     // Find ancestors (transactions this tx depends on)
     let mut to_visit = Vec::new();
-    
+
     // Start with direct parents
     for input in &tx.input {
         if mempool_txs.contains_key(&input.previous_output.txid) {
@@ -303,17 +303,18 @@ pub fn calculate_package_info(
         if visited_ancestors.contains(&ancestor_txid) {
             continue;
         }
-        
+
         if let Some(ancestor_entry) = mempool_txs.get(&ancestor_txid) {
             visited_ancestors.insert(ancestor_txid);
             package_info.ancestors.insert(ancestor_txid);
             package_info.ancestor_size += ancestor_entry.size;
             package_info.ancestor_fees += ancestor_entry.fee.to_sat();
-            
+
             // Add this ancestor's parents to visit
             for input in &ancestor_entry.tx.input {
-                if mempool_txs.contains_key(&input.previous_output.txid) 
-                    && !visited_ancestors.contains(&input.previous_output.txid) {
+                if mempool_txs.contains_key(&input.previous_output.txid)
+                    && !visited_ancestors.contains(&input.previous_output.txid)
+                {
                     to_visit.push(input.previous_output.txid);
                 }
             }
@@ -324,7 +325,7 @@ pub fn calculate_package_info(
     let txid = tx.compute_txid();
     let mut visited_descendants = HashSet::new();
     let mut to_visit_desc = Vec::new();
-    
+
     // Start by finding direct children
     for (child_txid, child_entry) in mempool_txs {
         for input in &child_entry.tx.input {
@@ -334,19 +335,19 @@ pub fn calculate_package_info(
             }
         }
     }
-    
+
     // BFS to find all descendants
     while let Some(desc_txid) = to_visit_desc.pop() {
         if visited_descendants.contains(&desc_txid) {
             continue;
         }
-        
+
         if let Some(desc_entry) = mempool_txs.get(&desc_txid) {
             visited_descendants.insert(desc_txid);
             package_info.descendants.insert(desc_txid);
             package_info.descendant_size += desc_entry.size;
             package_info.descendant_fees += desc_entry.fee.to_sat();
-            
+
             // Find this descendant's children
             for (child_txid, child_entry) in mempool_txs {
                 if visited_descendants.contains(child_txid) {

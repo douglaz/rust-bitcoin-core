@@ -193,14 +193,14 @@ impl RpcImplementation {
 
         if verbose {
             let mut entries = json!({});
-            
+
             // Get verbose information for each transaction
             for txid in mempool.get_transaction_ids() {
                 if let Some(verbose_entry) = mempool.get_verbose_entry(&txid) {
                     entries[txid.to_string()] = verbose_entry;
                 }
             }
-            
+
             Ok(entries)
         } else {
             let txids: Vec<String> = mempool
@@ -246,8 +246,8 @@ impl RpcImplementation {
     pub async fn get_peer_info(&self) -> Result<Value> {
         // Get peer information from network manager
         let peer_info = self.network.get_peer_info();
-        
-        // If get_peer_info returns empty or we need more details, 
+
+        // If get_peer_info returns empty or we need more details,
         // we can also get connected peers
         let result = if peer_info.is_empty() {
             // Fallback to getting connected peer addresses
@@ -257,43 +257,43 @@ impl RpcImplementation {
                 .enumerate()
                 .map(|(id, addr)| {
                     json!({
-                        "id": id,
-                        "addr": addr.to_string(),
-                        "addrbind": addr.to_string(),
-                        "network": if addr.is_ipv4() { "ipv4" } else { "ipv6" },
-                        "services": "000000000000040d",
-                        "servicesnames": ["NETWORK", "WITNESS", "NETWORK_LIMITED"],
-                        "relaytxes": true,
-                        "lastsend": 0,
-                        "lastrecv": 0,
-                    "last_transaction": 0,
-                    "last_block": 0,
-                    "bytessent": 0,
-                    "bytesrecv": 0,
-                    "conntime": 0,
-                    "timeoffset": 0,
-                    "pingtime": 0.001,
-                    "minping": 0.001,
-                    "version": 70016,
-                    "subver": "/Satoshi:25.0.0/",
-                    "inbound": false,
-                    "bip152_hb_to": false,
-                    "bip152_hb_from": false,
-                    "startingheight": 0,
-                    "presynced_headers": -1,
-                    "synced_headers": -1,
-                    "synced_blocks": -1,
-                    "inflight": [],
-                    "addr_relay_enabled": true,
-                    "addr_processed": 0,
-                    "addr_rate_limited": 0,
-                    "permissions": [],
-                    "minfeefilter": 0.00001,
-                    "bytessent_per_msg": {},
-                    "bytesrecv_per_msg": {}
+                            "id": id,
+                            "addr": addr.to_string(),
+                            "addrbind": addr.to_string(),
+                            "network": if addr.is_ipv4() { "ipv4" } else { "ipv6" },
+                            "services": "000000000000040d",
+                            "servicesnames": ["NETWORK", "WITNESS", "NETWORK_LIMITED"],
+                            "relaytxes": true,
+                            "lastsend": 0,
+                            "lastrecv": 0,
+                        "last_transaction": 0,
+                        "last_block": 0,
+                        "bytessent": 0,
+                        "bytesrecv": 0,
+                        "conntime": 0,
+                        "timeoffset": 0,
+                        "pingtime": 0.001,
+                        "minping": 0.001,
+                        "version": 70016,
+                        "subver": "/Satoshi:25.0.0/",
+                        "inbound": false,
+                        "bip152_hb_to": false,
+                        "bip152_hb_from": false,
+                        "startingheight": 0,
+                        "presynced_headers": -1,
+                        "synced_headers": -1,
+                        "synced_blocks": -1,
+                        "inflight": [],
+                        "addr_relay_enabled": true,
+                        "addr_processed": 0,
+                        "addr_rate_limited": 0,
+                        "permissions": [],
+                        "minfeefilter": 0.00001,
+                        "bytessent_per_msg": {},
+                        "bytesrecv_per_msg": {}
+                    })
                 })
-            })
-            .collect()
+                .collect()
         } else {
             // Use the detailed peer info from network manager
             peer_info

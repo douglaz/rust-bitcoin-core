@@ -69,8 +69,8 @@ impl Mempool {
             orphan_deps: DashMap::new(),
             package_relay_manager: Arc::new(RwLock::new(
                 crate::package_relay::PackageRelayManager::new(
-                    crate::package_relay::PackageValidator::default()
-                )
+                    crate::package_relay::PackageValidator::default(),
+                ),
             )),
         })
     }
@@ -339,8 +339,9 @@ impl Mempool {
                 .context("UTXO not found for sigops calculation")?;
             utxo_scripts.push(utxo.output.script_pubkey.clone());
         }
-        
-        let sigops = bitcoin_core_lib::script::count_transaction_sigops(&tx, &utxo_scripts, script_flags);
+
+        let sigops =
+            bitcoin_core_lib::script::count_transaction_sigops(&tx, &utxo_scripts, script_flags);
 
         // 11. Create enhanced entry
         let current_time = std::time::SystemTime::now()
@@ -530,7 +531,7 @@ impl Mempool {
         if let Some((_, tx)) = self.transactions.remove(txid) {
             // Get the entry before removing for ancestor/descendant updates
             let entry_clone = self.entries.get(txid).map(|e| e.clone());
-            
+
             // Remove from entries
             self.entries.remove(txid);
 
@@ -565,45 +566,50 @@ impl Mempool {
     /// Test if a transaction would be accepted (without adding it)
     pub async fn test_accept(&self, tx: &Transaction) -> Result<bool> {
         let txid = tx.compute_txid();
-        
+
         // Check if already in mempool
         if self.transactions.contains_key(&txid) {
             return Ok(false);
         }
-        
+
         // Validate transaction
         let chain_guard = self.chain.read().await;
         if let Err(_) = chain_guard.validate_transaction_for_mempool(&tx).await {
             return Ok(false);
         }
         drop(chain_guard);
-        
+
         // Check all inputs exist
         for input in &tx.input {
             if input.previous_output.is_null() {
                 continue;
             }
-            
+
             // Check if input is available (not in mempool or UTXO set)
             if !self.entries.contains_key(&input.previous_output.txid) {
-                if self.utxo_manager.get_utxo(&input.previous_output).await.is_none() {
+                if self
+                    .utxo_manager
+                    .get_utxo(&input.previous_output)
+                    .await
+                    .is_none()
+                {
                     return Ok(false);
                 }
             }
         }
-        
+
         // Calculate fee and validate policy
         let total_input_value = match self.utxo_manager.validate_transaction_inputs(&tx).await {
             Ok(v) => v,
             Err(_) => return Ok(false),
         };
-        
+
         let total_output_value: Amount = tx.output.iter().map(|out| out.value).sum();
         let fee = match total_input_value.checked_sub(total_output_value) {
             Some(f) => f,
             None => return Ok(false),
         };
-        
+
         // Create validation context
         let spent_outputs_map: HashMap<OutPoint, bitcoin::Txid> = self
             .spent_outputs
@@ -622,12 +628,12 @@ impl Mempool {
             mempool_txs: &entries_map,
             spent_outputs: &spent_outputs_map,
         };
-        
+
         // Validate against policy
         if let Err(_) = validate_mempool_acceptance(&tx, fee, &validation_ctx) {
             return Ok(false);
         }
-        
+
         Ok(true)
     }
 
@@ -652,12 +658,16 @@ impl Mempool {
     /// Get verbose entry information for RPC
     pub fn get_verbose_entry(&self, txid: &bitcoin::Txid) -> Option<serde_json::Value> {
         if let Some(entry) = self.entries.get(txid) {
-            let depends: Vec<String> = entry.package_info.ancestors
+            let depends: Vec<String> = entry
+                .package_info
+                .ancestors
                 .iter()
                 .map(|dep| dep.to_string())
                 .collect();
-            
-            let spentby: Vec<String> = entry.package_info.descendants
+
+            let spentby: Vec<String> = entry
+                .package_info
+                .descendants
                 .iter()
                 .map(|dep| dep.to_string())
                 .collect();
@@ -865,10 +875,10 @@ impl Mempool {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         let mut removed_count = 0;
         let mut txids_to_remove = Vec::new();
-        
+
         // Find expired transactions using entries which have metadata
         for entry_ref in self.entries.iter() {
             let (txid, entry) = entry_ref.pair();
@@ -876,7 +886,7 @@ impl Mempool {
                 txids_to_remove.push(*txid);
             }
         }
-        
+
         // Remove expired transactions
         for txid in txids_to_remove {
             if self.remove_transaction(&txid).await.is_ok() {
@@ -884,11 +894,14 @@ impl Mempool {
                 debug!("Removed expired transaction: {}", txid);
             }
         }
-        
+
         if removed_count > 0 {
-            info!("Removed {} expired transactions from mempool", removed_count);
+            info!(
+                "Removed {} expired transactions from mempool",
+                removed_count
+            );
         }
-        
+
         Ok(removed_count)
     }
 
@@ -897,9 +910,10 @@ impl Mempool {
         if self.transactions.len() <= target_size {
             return Ok(0);
         }
-        
+
         // Collect transactions with their fee rates from entries
-        let mut tx_by_feerate: Vec<(bitcoin::Txid, f64)> = self.entries
+        let mut tx_by_feerate: Vec<(bitcoin::Txid, f64)> = self
+            .entries
             .iter()
             .map(|entry_ref| {
                 let (txid, entry) = entry_ref.pair();
@@ -908,38 +922,46 @@ impl Mempool {
                 (*txid, fee_rate)
             })
             .collect();
-        
+
         // Sort by fee rate (ascending, so lowest fee rates first)
         tx_by_feerate.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        
+
         // Calculate how many to remove
         let to_remove = self.transactions.len() - target_size;
         let mut removed_count = 0;
-        
+
         // Remove lowest fee rate transactions
         for (txid, fee_rate) in tx_by_feerate.iter().take(to_remove) {
             if self.remove_transaction(txid).await.is_ok() {
                 removed_count += 1;
-                debug!("Evicted transaction {} with fee rate {:.2} sat/vB", txid, fee_rate);
+                debug!(
+                    "Evicted transaction {} with fee rate {:.2} sat/vB",
+                    txid, fee_rate
+                );
             }
         }
-        
+
         if removed_count > 0 {
-            info!("Evicted {} low-fee transactions from mempool", removed_count);
+            info!(
+                "Evicted {} low-fee transactions from mempool",
+                removed_count
+            );
         }
-        
+
         Ok(removed_count)
     }
 
     /// Update ancestor relationships when a new transaction is added
     async fn update_ancestors_for_new_tx(&self, txid: bitcoin::Txid) -> Result<()> {
         // Get the entry we just added
-        let entry = self.entries.get(&txid)
+        let entry = self
+            .entries
+            .get(&txid)
             .ok_or_else(|| anyhow::anyhow!("Transaction not found in mempool"))?;
-        
+
         let tx = &entry.tx;
         let package_info = &entry.package_info;
-        
+
         // For each ancestor, add this tx as a descendant
         for ancestor_txid in &package_info.ancestors {
             if let Some(mut ancestor_entry) = self.entries.get_mut(ancestor_txid) {
@@ -947,7 +969,7 @@ impl Mempool {
                 ancestor_entry.package_info.descendants.insert(txid);
                 ancestor_entry.package_info.descendant_size += entry.size;
                 ancestor_entry.package_info.descendant_fees += entry.fee.to_sat();
-                
+
                 // Also add all of this tx's descendants to the ancestor
                 for desc_txid in &package_info.descendants {
                     if !ancestor_entry.package_info.descendants.contains(desc_txid) {
@@ -960,7 +982,7 @@ impl Mempool {
                 }
             }
         }
-        
+
         // For each descendant, add this tx as an ancestor
         for descendant_txid in &package_info.descendants {
             if let Some(mut descendant_entry) = self.entries.get_mut(descendant_txid) {
@@ -968,7 +990,7 @@ impl Mempool {
                 descendant_entry.package_info.ancestors.insert(txid);
                 descendant_entry.package_info.ancestor_size += entry.size;
                 descendant_entry.package_info.ancestor_fees += entry.fee.to_sat();
-                
+
                 // Also add all of this tx's ancestors to the descendant
                 for anc_txid in &package_info.ancestors {
                     if !descendant_entry.package_info.ancestors.contains(anc_txid) {
@@ -981,52 +1003,67 @@ impl Mempool {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Update relationships when removing a transaction
-    async fn update_ancestors_for_removed_tx(&self, txid: bitcoin::Txid, entry: &EnhancedMempoolEntry) -> Result<()> {
+    async fn update_ancestors_for_removed_tx(
+        &self,
+        txid: bitcoin::Txid,
+        entry: &EnhancedMempoolEntry,
+    ) -> Result<()> {
         // Remove this tx from all ancestors' descendant lists
         for ancestor_txid in &entry.package_info.ancestors {
             if let Some(mut ancestor_entry) = self.entries.get_mut(ancestor_txid) {
                 ancestor_entry.package_info.descendants.remove(&txid);
-                ancestor_entry.package_info.descendant_size = 
-                    ancestor_entry.package_info.descendant_size.saturating_sub(entry.size);
-                ancestor_entry.package_info.descendant_fees = 
-                    ancestor_entry.package_info.descendant_fees.saturating_sub(entry.fee.to_sat());
+                ancestor_entry.package_info.descendant_size = ancestor_entry
+                    .package_info
+                    .descendant_size
+                    .saturating_sub(entry.size);
+                ancestor_entry.package_info.descendant_fees = ancestor_entry
+                    .package_info
+                    .descendant_fees
+                    .saturating_sub(entry.fee.to_sat());
             }
         }
-        
+
         // Remove this tx from all descendants' ancestor lists
         for descendant_txid in &entry.package_info.descendants {
             if let Some(mut descendant_entry) = self.entries.get_mut(descendant_txid) {
                 descendant_entry.package_info.ancestors.remove(&txid);
-                descendant_entry.package_info.ancestor_size = 
-                    descendant_entry.package_info.ancestor_size.saturating_sub(entry.size);
-                descendant_entry.package_info.ancestor_fees = 
-                    descendant_entry.package_info.ancestor_fees.saturating_sub(entry.fee.to_sat());
+                descendant_entry.package_info.ancestor_size = descendant_entry
+                    .package_info
+                    .ancestor_size
+                    .saturating_sub(entry.size);
+                descendant_entry.package_info.ancestor_fees = descendant_entry
+                    .package_info
+                    .ancestor_fees
+                    .saturating_sub(entry.fee.to_sat());
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Accept a package of transactions atomically
-    pub async fn accept_package(&mut self, package: crate::package_relay::Package) -> Result<crate::package_relay::PackageAcceptanceResult> {
+    pub async fn accept_package(
+        &mut self,
+        package: crate::package_relay::Package,
+    ) -> Result<crate::package_relay::PackageAcceptanceResult> {
         use crate::package_relay::{PackageAcceptanceResult, PackageValidator};
-        
+
         info!(
             "Processing package with {} transactions, total fee: {}, total size: {} bytes",
             package.transactions.len(),
             package.total_fee,
             package.total_size
         );
-        
+
         // Validate package structure
         let validator = PackageValidator::default();
         validator.validate_package(&package)?;
-        
+
         // Check for conflicts with existing mempool transactions
         let mut conflicts = Vec::new();
         for tx in &package.transactions {
@@ -1039,41 +1076,50 @@ impl Mempool {
                 }
             }
         }
-        
+
         // If there are conflicts, check package RBF
         if !conflicts.is_empty() {
-            info!("Package conflicts with {} existing transactions", conflicts.len());
-            
+            info!(
+                "Package conflicts with {} existing transactions",
+                conflicts.len()
+            );
+
             // For now, reject packages with conflicts
             // Full implementation would check package RBF rules
-            let reasons: Vec<(bitcoin::Txid, String)> = package.transactions
+            let reasons: Vec<(bitcoin::Txid, String)> = package
+                .transactions
                 .iter()
-                .map(|tx| (tx.compute_txid(), "Package conflicts with mempool".to_string()))
+                .map(|tx| {
+                    (
+                        tx.compute_txid(),
+                        "Package conflicts with mempool".to_string(),
+                    )
+                })
                 .collect();
-                
+
             return Ok(PackageAcceptanceResult::AllRejected { reasons });
         }
-        
+
         // Try to accept each transaction in topological order
         let mut accepted = Vec::new();
         let mut rejected = Vec::new();
-        
+
         for tx in &package.transactions {
             let txid = tx.compute_txid();
-            
+
             // Check if already in mempool
             if self.transactions.contains_key(&txid) {
                 debug!("Transaction {} already in mempool", txid);
                 accepted.push(txid);
                 continue;
             }
-            
+
             // Try to add to mempool
             match self.add_transaction(tx.clone()).await {
                 Ok(()) => {
                     info!("Accepted package transaction {}", txid);
                     accepted.push(txid);
-                    
+
                     // Check for orphans that can now be resolved
                     let mut orphans_to_process = Vec::new();
                     if let Some((_, orphan_set)) = self.orphan_deps.remove(&txid) {
@@ -1083,7 +1129,7 @@ impl Mempool {
                             }
                         }
                     }
-                    
+
                     // Process resolved orphans
                     for orphan_tx in orphans_to_process {
                         let _ = self.add_transaction(orphan_tx).await;
@@ -1095,7 +1141,7 @@ impl Mempool {
                 }
             }
         }
-        
+
         // Return appropriate result
         if rejected.is_empty() {
             Ok(PackageAcceptanceResult::AllAccepted {
@@ -1104,17 +1150,12 @@ impl Mempool {
                 total_size: package.total_size,
             })
         } else if accepted.is_empty() {
-            Ok(PackageAcceptanceResult::AllRejected {
-                reasons: rejected,
-            })
+            Ok(PackageAcceptanceResult::AllRejected { reasons: rejected })
         } else {
-            Ok(PackageAcceptanceResult::PartiallyAccepted {
-                accepted,
-                rejected,
-            })
+            Ok(PackageAcceptanceResult::PartiallyAccepted { accepted, rejected })
         }
     }
-    
+
     /// Create a package from a child transaction and its unconfirmed parents
     pub async fn create_child_with_parents_package(
         &self,
@@ -1126,27 +1167,27 @@ impl Mempool {
         } else {
             return Ok(None);
         };
-        
+
         // Find unconfirmed parent transactions
         let mut parents = Vec::new();
         for input in &child_tx.input {
             let parent_txid = input.previous_output.txid;
-            
+
             // Check if parent is in mempool
             if let Some(parent_tx) = self.transactions.get(&parent_txid) {
                 parents.push(parent_tx.value().clone());
             }
         }
-        
+
         if parents.is_empty() {
             // No unconfirmed parents, not a package
             return Ok(None);
         }
-        
+
         // Create package
         let package_manager = self.package_relay_manager.read().await;
         let package = package_manager.create_child_with_parents_package(child_tx, parents)?;
-        
+
         Ok(Some(package))
     }
 }

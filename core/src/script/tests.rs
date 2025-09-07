@@ -1,16 +1,15 @@
 #[cfg(test)]
 mod tests {
-    
+
     use crate::script::{
         verify_script, verify_witness_program, ScriptError, ScriptFlags, SignatureChecker,
     };
-    
+
     use bitcoin::blockdata::opcodes::all::*;
-    
+
     use bitcoin::hashes::{sha256, Hash};
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
-    
-    
+
     use bitcoin::ScriptBuf;
 
     /// Test signature checker that allows specific signatures
@@ -464,12 +463,12 @@ mod tests {
     fn test_bip66_strict_der_signatures() {
         // Test BIP66 strict DER signature enforcement
         use crate::script::SignatureChecker;
-        
+
         // Create a test signature checker that validates DER signatures
         struct DERChecker {
             allow_invalid_der: bool,
         }
-        
+
         impl SignatureChecker for DERChecker {
             fn check_sig(
                 &self,
@@ -484,7 +483,7 @@ mod tests {
                     if signature.is_empty() {
                         return Ok(false);
                     }
-                    
+
                     // Simple check: proper DER should start with 0x30
                     if signature[0] != 0x30 {
                         return Err(ScriptError::SigDer);
@@ -492,7 +491,7 @@ mod tests {
                 }
                 Ok(true)
             }
-            
+
             fn check_schnorr_sig(
                 &self,
                 _signature: &[u8],
@@ -501,16 +500,16 @@ mod tests {
             ) -> crate::script::ScriptResult<bool> {
                 Ok(false)
             }
-            
+
             fn check_locktime(&self, _locktime: i64) -> crate::script::ScriptResult<bool> {
                 Ok(true)
             }
-            
+
             fn check_sequence(&self, _sequence: i64) -> crate::script::ScriptResult<bool> {
                 Ok(true)
             }
         }
-        
+
         // Create a script with CHECKSIG
         let mut script_pubkey_bytes = vec![];
         // Push pubkey (33 bytes compressed)
@@ -518,37 +517,42 @@ mod tests {
         script_pubkey_bytes.extend_from_slice(&[0x02; 33]);
         script_pubkey_bytes.push(OP_CHECKSIG.to_u8());
         let script_pubkey = ScriptBuf::from(script_pubkey_bytes);
-        
+
         // Create scriptSig with valid DER signature
         let mut valid_sig = vec![0x30]; // DER sequence tag
         valid_sig.extend_from_slice(&[0x44; 68]); // Dummy signature data
         valid_sig.push(0x01); // SIGHASH_ALL
-        
+
         let mut script_sig_bytes = vec![];
         script_sig_bytes.push(valid_sig.len() as u8);
         script_sig_bytes.extend_from_slice(&valid_sig);
         let script_sig = ScriptBuf::from(script_sig_bytes);
-        
+
         // Test with BIP66 enabled - should succeed with valid DER
-        let checker = DERChecker { allow_invalid_der: false };
+        let checker = DERChecker {
+            allow_invalid_der: false,
+        };
         let result = verify_script(
             &script_sig,
             &script_pubkey,
             ScriptFlags::STRICTENC,
             &checker,
         );
-        assert!(result.is_ok(), "Should accept valid DER signature with BIP66");
-        
+        assert!(
+            result.is_ok(),
+            "Should accept valid DER signature with BIP66"
+        );
+
         // Create scriptSig with invalid DER signature (wrong tag)
         let mut invalid_sig = vec![0x31]; // Wrong DER tag
         invalid_sig.extend_from_slice(&[0x44; 68]);
         invalid_sig.push(0x01); // SIGHASH_ALL
-        
+
         let mut script_sig_bytes = vec![];
         script_sig_bytes.push(invalid_sig.len() as u8);
         script_sig_bytes.extend_from_slice(&invalid_sig);
         let invalid_script_sig = ScriptBuf::from(script_sig_bytes);
-        
+
         // Test with BIP66 enabled - should fail with invalid DER
         let result = verify_script(
             &invalid_script_sig,
@@ -556,8 +560,11 @@ mod tests {
             ScriptFlags::STRICTENC,
             &checker,
         );
-        assert!(result.is_err(), "Should reject invalid DER signature with BIP66");
-        
+        assert!(
+            result.is_err(),
+            "Should reject invalid DER signature with BIP66"
+        );
+
         // Test without BIP66 - should accept invalid DER
         let result = verify_script(
             &invalid_script_sig,
@@ -572,7 +579,7 @@ mod tests {
     fn test_checklocktimeverify() {
         // Test BIP65 CHECKLOCKTIMEVERIFY
         // Create a script that uses OP_CHECKLOCKTIMEVERIFY (OP_NOP2 when BIP65 active)
-        
+
         // Test 1: Valid locktime check
         let mut script_bytes = vec![];
         // Push locktime value (block height 100)
@@ -584,15 +591,15 @@ mod tests {
         script_bytes.push(OP_DROP.to_u8());
         // Push true to succeed
         script_bytes.push(OP_PUSHNUM_1.to_u8());
-        
+
         let script = ScriptBuf::from(script_bytes);
         let empty_script = ScriptBuf::new();
-        
+
         // Create a test checker that accepts the locktime
         struct CLTVChecker {
             locktime_ok: bool,
         }
-        
+
         impl SignatureChecker for CLTVChecker {
             fn check_sig(
                 &self,
@@ -603,7 +610,7 @@ mod tests {
             ) -> crate::script::ScriptResult<bool> {
                 Ok(false)
             }
-            
+
             fn check_schnorr_sig(
                 &self,
                 _signature: &[u8],
@@ -612,17 +619,17 @@ mod tests {
             ) -> crate::script::ScriptResult<bool> {
                 Ok(false)
             }
-            
+
             fn check_locktime(&self, locktime: i64) -> crate::script::ScriptResult<bool> {
                 // Check if the requested locktime (100) is valid
                 Ok(self.locktime_ok && locktime == 100)
             }
-            
+
             fn check_sequence(&self, _sequence: i64) -> crate::script::ScriptResult<bool> {
                 Ok(true)
             }
         }
-        
+
         // Test with BIP65 enabled and valid locktime
         let checker = CLTVChecker { locktime_ok: true };
         let result = verify_script(
@@ -632,7 +639,7 @@ mod tests {
             &checker,
         );
         assert!(result.is_ok(), "CLTV should succeed with valid locktime");
-        
+
         // Test with BIP65 enabled but invalid locktime
         let checker = CLTVChecker { locktime_ok: false };
         let result = verify_script(
@@ -642,19 +649,19 @@ mod tests {
             &checker,
         );
         assert!(result.is_err(), "CLTV should fail with invalid locktime");
-        
+
         // Test with BIP65 disabled - should act as NOP
         let checker = CLTVChecker { locktime_ok: false };
         let result = verify_script(&empty_script, &script, ScriptFlags::empty(), &checker);
         assert!(result.is_ok(), "CLTV should be NOP when BIP65 is disabled");
-        
+
         // Test 2: Empty stack should fail
         let mut script_bytes = vec![];
         script_bytes.push(OP_CLTV.to_u8());
-        
+
         let script = ScriptBuf::from(script_bytes);
         let checker = CLTVChecker { locktime_ok: true };
-        
+
         let result = verify_script(
             &empty_script,
             &script,

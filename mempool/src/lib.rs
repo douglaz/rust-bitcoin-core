@@ -18,11 +18,13 @@ pub use expiration::{ExpirationPolicy, MaintenanceResult};
 pub use fee_estimation::{
     EstimationMode, FeeEstimate, FeeEstimator, FeePriority, SmartFeeEstimate,
 };
-pub use persistence::{MempoolPersistence, MempoolSnapshot};
 pub use package_relay::{
     Package, PackageAcceptanceResult, PackageRelayManager, PackageType, PackageValidator,
 };
-pub use rbf::{RBFConflictTracker, RBFPolicy, ReplacementCandidate, ReplacementCheck, UtxoProvider};
+pub use persistence::{MempoolPersistence, MempoolSnapshot};
+pub use rbf::{
+    RBFConflictTracker, RBFPolicy, ReplacementCandidate, ReplacementCheck, UtxoProvider,
+};
 pub use utxo_provider::{InMemoryUtxoProvider, MempoolUtxoProvider};
 pub use validation::{EnhancedMempoolEntry, MempoolPolicy, PackageInfo, ValidationContext};
 

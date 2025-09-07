@@ -237,7 +237,9 @@ impl PrometheusExporter {
         let mut output = String::new();
 
         // Chain metrics
-        output.push_str(&"# HELP bitcoin_blocks_processed Total number of blocks processed\n".to_string());
+        output.push_str(
+            &"# HELP bitcoin_blocks_processed Total number of blocks processed\n".to_string(),
+        );
         output.push_str(&"# TYPE bitcoin_blocks_processed counter\n".to_string());
         output.push_str(&format!(
             "bitcoin_blocks_processed {}\n",
@@ -263,7 +265,8 @@ impl PrometheusExporter {
             metrics.bytes_sent
         ));
 
-        output.push_str(&"# HELP bitcoin_network_bytes_received Total bytes received\n".to_string());
+        output
+            .push_str(&"# HELP bitcoin_network_bytes_received Total bytes received\n".to_string());
         output.push_str(&"# TYPE bitcoin_network_bytes_received counter\n".to_string());
         output.push_str(&format!(
             "bitcoin_network_bytes_received {}\n",
@@ -271,7 +274,9 @@ impl PrometheusExporter {
         ));
 
         // Mempool metrics
-        output.push_str(&"# HELP bitcoin_mempool_size Number of transactions in mempool\n".to_string());
+        output.push_str(
+            &"# HELP bitcoin_mempool_size Number of transactions in mempool\n".to_string(),
+        );
         output.push_str(&"# TYPE bitcoin_mempool_size gauge\n".to_string());
         output.push_str(&format!("bitcoin_mempool_size {}\n", metrics.mempool_size));
 
@@ -283,14 +288,19 @@ impl PrometheusExporter {
         ));
 
         // Performance metrics
-        output.push_str(&"# HELP bitcoin_block_validation_ms Average block validation time in milliseconds\n".to_string());
+        output.push_str(
+            &"# HELP bitcoin_block_validation_ms Average block validation time in milliseconds\n"
+                .to_string(),
+        );
         output.push_str(&"# TYPE bitcoin_block_validation_ms gauge\n".to_string());
         output.push_str(&format!(
             "bitcoin_block_validation_ms {}\n",
             metrics.block_validation_time_ms
         ));
 
-        output.push_str(&"# HELP bitcoin_rpc_requests_total Total number of RPC requests\n".to_string());
+        output.push_str(
+            &"# HELP bitcoin_rpc_requests_total Total number of RPC requests\n".to_string(),
+        );
         output.push_str(&"# TYPE bitcoin_rpc_requests_total counter\n".to_string());
         output.push_str(&format!(
             "bitcoin_rpc_requests_total {}\n",

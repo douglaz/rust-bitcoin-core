@@ -202,10 +202,10 @@ impl SimpleRpcServer {
             async move {
                 let hash_str: String = params.one()?;
                 debug!("RPC: getblock({})", hash_str);
-                
+
                 let hash = BlockHash::from_str(&hash_str)
                     .map_err(|e| ErrorObjectOwned::owned(-1, e.to_string(), None::<()>))?;
-                
+
                 let chain = chain.read().await;
                 match chain.get_block(&hash).await {
                     Ok(Some(block)) => {
@@ -262,13 +262,13 @@ impl SimpleRpcServer {
                         (txid_str, None)
                     }
                 };
-                
+
                 let verbose = verbose.unwrap_or(false);
                 debug!("RPC: getrawtransaction({}, verbose={})", txid_str, verbose);
-                
+
                 let txid = Txid::from_str(&txid_str)
                     .map_err(|e| ErrorObjectOwned::owned(-1, e.to_string(), None::<()>))?;
-                
+
                 // Check mempool first
                 let mempool = mempool.read().await;
                 if let Some(tx) = mempool.get_transaction(&txid) {
@@ -308,7 +308,7 @@ impl SimpleRpcServer {
                     }
                 }
                 drop(mempool);
-                
+
                 // Check blockchain (would use transaction index if available)
                 let chain = chain.read().await;
                 match chain.find_transaction(&txid).await {
@@ -322,7 +322,7 @@ impl SimpleRpcServer {
                             };
                             let tip_height = chain.get_best_height();
                             let confirmations = if height > 0 { tip_height - height + 1 } else { 0 };
-                            
+
                             RpcResult::Ok(serde_json::json!({
                                 "txid": tx.compute_txid().to_string(),
                                 "hash": tx.compute_wtxid().to_string(),
@@ -435,21 +435,22 @@ impl SimpleRpcServer {
                             } else {
                                 0
                             };
-                            
+
                             // Calculate chainwork (simplified - would need proper implementation)
                             let chainwork = format!("{:064x}", 0u128); // Placeholder
-                            
+
                             // Get next block hash if it exists
                             let next_blockhash = if height < best_height {
-                                chain.get_block_hash_at_height(height + 1)
+                                chain
+                                    .get_block_hash_at_height(height + 1)
                                     .map(|h| h.to_string())
                             } else {
                                 None
                             };
-                            
+
                             // Calculate median time (would need to look at past 11 blocks)
                             let mediantime = header.time; // Simplified - using block time as median
-                            
+
                             // Build response with all fields
                             let mut response = json!({
                                 "hash": hash.to_string(),
@@ -467,12 +468,12 @@ impl SimpleRpcServer {
                                 "nTx": 0, // Would need to load full block to get tx count
                                 "previousblockhash": header.prev_blockhash.to_string(),
                             });
-                            
+
                             // Add nextblockhash if it exists
                             if let Some(next_hash) = next_blockhash {
                                 response["nextblockhash"] = json!(next_hash);
                             }
-                            
+
                             RpcResult::Ok(response)
                         } else {
                             // Return hex-encoded header as a JSON string
@@ -538,7 +539,7 @@ impl SimpleRpcServer {
             async move {
                 debug!("RPC: testmempoolaccept");
                 let rawtxs: Vec<String> = params.one()?;
-                
+
                 let mut results = Vec::new();
                 for rawtx in rawtxs {
                     let tx_bytes = match hex::decode(&rawtx) {
@@ -552,7 +553,7 @@ impl SimpleRpcServer {
                             continue;
                         }
                     };
-                    
+
                     let tx: Transaction = match deserialize(&tx_bytes) {
                         Ok(t) => t,
                         Err(_) => {
@@ -564,7 +565,7 @@ impl SimpleRpcServer {
                             continue;
                         }
                     };
-                    
+
                     let txid = tx.compute_txid();
                     let mempool = mempool.read().await;
                     match mempool.test_accept(&tx).await {
@@ -584,7 +585,7 @@ impl SimpleRpcServer {
                         }
                     }
                 }
-                
+
                 RpcResult::Ok(json!(results))
             }
         })?;
@@ -735,11 +736,11 @@ impl SimpleRpcServer {
             let chain = chain_ref.clone();
             async move {
                 debug!("RPC: getblockstats");
-                
+
                 // Parse parameters - can be either block hash or height
                 let mut params = params.sequence();
                 let hash_or_height: serde_json::Value = params.next()?;
-                
+
                 // Determine if we have a hash or height
                 let block_hash = if let Some(height) = hash_or_height.as_u64() {
                     // Height provided - get hash from height
@@ -767,7 +768,7 @@ impl SimpleRpcServer {
                         "error": "Invalid parameter: expected block hash or height"
                     }));
                 };
-                
+
                 // Get the block
                 let chain = chain.read().await;
                 let block = match chain.get_block(&block_hash).await {
@@ -783,13 +784,13 @@ impl SimpleRpcServer {
                         }));
                     }
                 };
-                
+
                 // Get block height
                 let height = match chain.get_block_height(&block_hash) {
                     Ok(h) => h,
                     _ => 0, // Default to 0 if we can't get height
                 };
-                
+
                 // Calculate statistics
                 let tx_count = block.txdata.len();
                 let mut total_size = 0usize;
@@ -801,40 +802,52 @@ impl SimpleRpcServer {
                 let mut min_fee = u64::MAX;
                 let mut max_fee = 0u64;
                 let mut segwit_tx_count = 0usize;
-                
+
                 // Process each transaction
                 for (i, tx) in block.txdata.iter().enumerate() {
                     let tx_bytes = serialize(tx);
                     total_size += tx_bytes.len();
                     total_weight += tx.weight().to_wu();
-                    
+
                     // Count inputs and outputs
                     total_inputs += tx.input.len();
                     total_outputs += tx.output.len();
-                    
+
                     // Sum output values
                     for output in &tx.output {
                         total_output_value += output.value.to_sat();
                     }
-                    
+
                     // Check if transaction is segwit
                     if tx.input.iter().any(|input| !input.witness.is_empty()) {
                         segwit_tx_count += 1;
                     }
-                    
+
                     // Calculate fee for non-coinbase transactions
-                    if i > 0 {  // Skip coinbase (first transaction)
-                        // Note: Accurate fee calculation would require looking up input values
-                        // For now, we'll estimate or skip fee stats
-                        // This is a limitation without UTXO lookups
+                    if i > 0 { // Skip coinbase (first transaction)
+                         // Note: Accurate fee calculation would require looking up input values
+                         // For now, we'll estimate or skip fee stats
+                         // This is a limitation without UTXO lookups
                     }
                 }
-                
+
                 // Calculate averages
-                let avg_tx_size = if tx_count > 0 { total_size / tx_count } else { 0 };
-                let avg_inputs = if tx_count > 1 { total_inputs / (tx_count - 1) } else { 0 }; // Exclude coinbase
-                let avg_outputs = if tx_count > 0 { total_outputs / tx_count } else { 0 };
-                
+                let avg_tx_size = if tx_count > 0 {
+                    total_size / tx_count
+                } else {
+                    0
+                };
+                let avg_inputs = if tx_count > 1 {
+                    total_inputs / (tx_count - 1)
+                } else {
+                    0
+                }; // Exclude coinbase
+                let avg_outputs = if tx_count > 0 {
+                    total_outputs / tx_count
+                } else {
+                    0
+                };
+
                 // Build response
                 let response = json!({
                     "blockhash": block_hash.to_string(),
@@ -861,31 +874,31 @@ impl SimpleRpcServer {
                     // "max_fee": max_fee,
                     // "avg_fee": if tx_count > 1 { fee_total / (tx_count - 1) as u64 } else { 0 },
                 });
-                
+
                 RpcResult::Ok(response)
             }
         })?;
-        
+
         // validateaddress - Validate a Bitcoin address
         module.register_async_method("validateaddress", move |params, _, _| {
             async move {
                 debug!("RPC: validateaddress");
-                
+
                 // Get the address string parameter
                 let address_str: String = params.one()?;
-                
+
                 // Try to parse the address
                 let address_result = Address::from_str(&address_str);
-                
+
                 let mut response = json!({
                     "address": address_str,
                 });
-                
+
                 match address_result {
                     Ok(address) => {
                         // Valid address
                         response["isvalid"] = json!(true);
-                        
+
                         // Determine the type
                         let script_pubkey = address.assume_checked().script_pubkey();
                         let (script_type, is_witness) = if script_pubkey.is_p2pkh() {
@@ -901,11 +914,11 @@ impl SimpleRpcServer {
                         } else {
                             ("unknown", false)
                         };
-                        
+
                         response["scriptPubKey"] = json!(hex::encode(script_pubkey.as_bytes()));
                         response["isscript"] = json!(script_pubkey.is_p2sh());
                         response["iswitness"] = json!(is_witness);
-                        
+
                         // Add witness version and program if applicable
                         if is_witness {
                             if script_pubkey.is_p2wpkh() || script_pubkey.is_p2wsh() {
@@ -920,13 +933,12 @@ impl SimpleRpcServer {
                                 response["witness_program"] = json!(hex::encode(program));
                             }
                         }
-                        
+
                         // Note: We don't have wallet info, so we can't determine if it's "mine"
                         // These would require wallet integration:
                         // response["ismine"] = json!(false);
                         // response["iswatchonly"] = json!(false);
                         // response["solvable"] = json!(true);
-                        
                     }
                     Err(_) => {
                         // Invalid address
@@ -934,19 +946,19 @@ impl SimpleRpcServer {
                         response["error"] = json!("Invalid Bitcoin address");
                     }
                 }
-                
+
                 RpcResult::Ok(response)
             }
         })?;
-        
+
         // decoderawtransaction - Decode a serialized transaction
         module.register_async_method("decoderawtransaction", move |params, _, _| {
             async move {
                 debug!("RPC: decoderawtransaction");
-                
+
                 // Get the hex string parameter
                 let hex_tx: String = params.one()?;
-                
+
                 // Decode the hex string to bytes
                 let tx_bytes = match hex::decode(&hex_tx) {
                     Ok(bytes) => bytes,
@@ -956,7 +968,7 @@ impl SimpleRpcServer {
                         }));
                     }
                 };
-                
+
                 // Deserialize the transaction
                 let tx: Transaction = match deserialize(&tx_bytes) {
                     Ok(tx) => tx,
@@ -966,14 +978,14 @@ impl SimpleRpcServer {
                         }));
                     }
                 };
-                
+
                 // Build the detailed JSON response
                 let mut vin = vec![];
                 for (index, input) in tx.input.iter().enumerate() {
                     let mut input_obj = json!({
                         "sequence": input.sequence.0,
                     });
-                    
+
                     if input.previous_output.is_null() {
                         // Coinbase transaction
                         input_obj["coinbase"] = json!(hex::encode(&input.script_sig));
@@ -981,7 +993,7 @@ impl SimpleRpcServer {
                         // Regular input
                         input_obj["txid"] = json!(input.previous_output.txid.to_string());
                         input_obj["vout"] = json!(input.previous_output.vout);
-                        
+
                         // Decode scriptSig
                         let script_sig = &input.script_sig;
                         input_obj["scriptSig"] = json!({
@@ -989,40 +1001,40 @@ impl SimpleRpcServer {
                             "hex": hex::encode(script_sig.as_bytes()),
                         });
                     }
-                    
+
                     // Add witness data if present
                     if !input.witness.is_empty() {
-                        let witness_hex: Vec<String> = input.witness.iter()
-                            .map(|w| hex::encode(w))
-                            .collect();
+                        let witness_hex: Vec<String> =
+                            input.witness.iter().map(|w| hex::encode(w)).collect();
                         input_obj["txinwitness"] = json!(witness_hex);
                     }
-                    
+
                     vin.push(input_obj);
                 }
-                
+
                 // Build vout array
                 let mut vout = vec![];
                 for (index, output) in tx.output.iter().enumerate() {
                     let script_pubkey = &output.script_pubkey;
-                    
+
                     // Determine the type and required signatures
-                    let (script_type, req_sigs, addresses): (&str, i32, Vec<String>) = if script_pubkey.is_p2pkh() {
-                        ("pubkeyhash", 1, vec![])
-                    } else if script_pubkey.is_p2sh() {
-                        ("scripthash", 1, vec![])
-                    } else if script_pubkey.is_p2wpkh() {
-                        ("witness_v0_keyhash", 1, vec![])
-                    } else if script_pubkey.is_p2wsh() {
-                        ("witness_v0_scripthash", 1, vec![])
-                    } else if script_pubkey.is_p2tr() {
-                        ("witness_v1_taproot", 1, vec![])
-                    } else if script_pubkey.is_op_return() {
-                        ("nulldata", 0, vec![])
-                    } else {
-                        ("nonstandard", 0, vec![])
-                    };
-                    
+                    let (script_type, req_sigs, addresses): (&str, i32, Vec<String>) =
+                        if script_pubkey.is_p2pkh() {
+                            ("pubkeyhash", 1, vec![])
+                        } else if script_pubkey.is_p2sh() {
+                            ("scripthash", 1, vec![])
+                        } else if script_pubkey.is_p2wpkh() {
+                            ("witness_v0_keyhash", 1, vec![])
+                        } else if script_pubkey.is_p2wsh() {
+                            ("witness_v0_scripthash", 1, vec![])
+                        } else if script_pubkey.is_p2tr() {
+                            ("witness_v1_taproot", 1, vec![])
+                        } else if script_pubkey.is_op_return() {
+                            ("nulldata", 0, vec![])
+                        } else {
+                            ("nonstandard", 0, vec![])
+                        };
+
                     let output_obj = json!({
                         "value": output.value.to_btc(),
                         "n": index,
@@ -1034,15 +1046,15 @@ impl SimpleRpcServer {
                             "addresses": addresses,
                         }
                     });
-                    
+
                     vout.push(output_obj);
                 }
-                
+
                 // Calculate sizes
                 let size = tx_bytes.len();
                 let vsize = tx.vsize();
                 let weight = tx.weight().to_wu() as usize;
-                
+
                 // Build the complete response
                 let response = json!({
                     "txid": tx.compute_txid().to_string(),
@@ -1055,7 +1067,7 @@ impl SimpleRpcServer {
                     "vin": vin,
                     "vout": vout,
                 });
-                
+
                 RpcResult::Ok(response)
             }
         })?;
@@ -1068,15 +1080,15 @@ impl SimpleRpcServer {
             let mempool = mempool_clone.clone();
             async move {
                 debug!("RPC: gettxout");
-                
+
                 // Parse parameters: txid, vout, include_mempool (optional)
                 let params: Vec<serde_json::Value> = params.parse().unwrap_or_default();
                 if params.len() < 2 {
                     return RpcResult::Ok(
-                        json!({"error": "Missing parameters: txid and vout required"})
+                        json!({"error": "Missing parameters: txid and vout required"}),
                     );
                 }
-                
+
                 // Parse txid
                 let txid_str = params[0].as_str().ok_or_else(|| {
                     jsonrpsee::types::ErrorObject::owned(
@@ -1085,7 +1097,7 @@ impl SimpleRpcServer {
                         None::<()>,
                     )
                 })?;
-                
+
                 let txid = match Txid::from_str(txid_str) {
                     Ok(id) => id,
                     Err(e) => {
@@ -1094,7 +1106,7 @@ impl SimpleRpcServer {
                         }));
                     }
                 };
-                
+
                 // Parse vout
                 let vout = match params[1].as_u64() {
                     Some(v) if v <= u32::MAX as u64 => v as u32,
@@ -1104,18 +1116,16 @@ impl SimpleRpcServer {
                         }));
                     }
                 };
-                
+
                 // Parse include_mempool (default true)
-                let include_mempool = params.get(2)
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
-                
+                let include_mempool = params.get(2).and_then(|v| v.as_bool()).unwrap_or(true);
+
                 // Create the outpoint
                 let outpoint = OutPoint::new(txid, vout);
-                
+
                 // First check if this output is spent
                 let chain = chain.read().await;
-                
+
                 // Try to get UTXO from chain state - this is async
                 let utxo = match chain.get_utxo(&outpoint).await {
                     Ok(output) => output,
@@ -1125,7 +1135,7 @@ impl SimpleRpcServer {
                         }));
                     }
                 };
-                
+
                 // If not in chain and include_mempool is true, check mempool
                 let (tx_out, confirmations) = if let Some(tx_output) = utxo {
                     // Found in UTXO set
@@ -1135,7 +1145,7 @@ impl SimpleRpcServer {
                 } else if include_mempool {
                     // Check mempool
                     let mempool = mempool.read().await;
-                    
+
                     // Look for the transaction in mempool
                     if let Some(tx) = mempool.get_transaction(&txid) {
                         if let Some(output) = tx.output.get(vout as usize) {
@@ -1153,13 +1163,13 @@ impl SimpleRpcServer {
                     // Not found and not checking mempool
                     return RpcResult::Ok(Value::Null);
                 };
-                
+
                 // Get the best block hash
                 let best_hash = chain.get_best_hash();
-                
+
                 // Create script pubkey hex
                 let script_hex = hex::encode(tx_out.script_pubkey.as_bytes());
-                
+
                 // Determine script type
                 let script_type = if tx_out.script_pubkey.is_p2pkh() {
                     "pubkeyhash"
@@ -1176,7 +1186,7 @@ impl SimpleRpcServer {
                 } else {
                     "unknown"
                 };
-                
+
                 // Build response
                 let response = json!({
                     "bestblock": best_hash.to_string(),
@@ -1188,7 +1198,7 @@ impl SimpleRpcServer {
                     },
                     "coinbase": false,  // We don't track this info currently
                 });
-                
+
                 RpcResult::Ok(response)
             }
         })?;
@@ -1296,7 +1306,7 @@ impl SimpleRpcServer {
             async move {
                 debug!("RPC: gettxoutsetinfo");
                 let chain = chain.read().await;
-                
+
                 match chain.get_utxo_stats().await {
                     Ok(stats) => {
                         RpcResult::Ok(json!({
@@ -1337,7 +1347,7 @@ impl SimpleRpcServer {
 
                 // Get mining candidates from mempool
                 let candidates = mempool.get_mining_candidates().await;
-                
+
                 // Convert candidates to transactions for the template
                 let transactions: Vec<bitcoin::Transaction> = candidates
                     .into_iter()
@@ -1347,10 +1357,11 @@ impl SimpleRpcServer {
                 match miner.create_block_template(tip, height, transactions).await {
                     Ok(template) => {
                         // Format transactions for the block template response
-                        let tx_data: Vec<_> = template.transactions
+                        let tx_data: Vec<_> = template
+                            .transactions
                             .iter()
                             .enumerate()
-                            .skip(1)  // Skip coinbase transaction (index 0)
+                            .skip(1) // Skip coinbase transaction (index 0)
                             .map(|(index, tx)| {
                                 let mut tx_bytes = Vec::new();
                                 let _ = tx.consensus_encode(&mut tx_bytes);
@@ -1365,7 +1376,7 @@ impl SimpleRpcServer {
                                 })
                             })
                             .collect();
-                        
+
                         RpcResult::Ok(json!({
                             "version": template.version,
                             "previousblockhash": template.previous_block_hash.to_string(),
@@ -1378,7 +1389,7 @@ impl SimpleRpcServer {
                             "capabilities": ["proposal"],
                             "rules": ["segwit"],
                         }))
-                    },
+                    }
                     Err(e) => {
                         RpcResult::Ok(json!({"error": format!("Failed to create template: {}", e)}))
                     }
@@ -1404,12 +1415,12 @@ impl SimpleRpcServer {
                 let nblocks: u32 = params.next()?;
                 let address_str: String = params.next()?;
                 let _maxtries: Option<u32> = params.optional_next()?;
-                
+
                 // Get bitcoin network from chain for proper address validation
                 let chain_guard = chain.read().await;
                 let bitcoin_network = chain_guard.network();
                 drop(chain_guard);
-                
+
                 // Validate and parse address for the correct network
                 let address = match Address::from_str(&address_str) {
                     Ok(addr) => match addr.require_network(bitcoin_network) {
@@ -1418,24 +1429,24 @@ impl SimpleRpcServer {
                     },
                     Err(e) => return RpcResult::Ok(json!({"error": format!("Invalid address: {}", e)})),
                 };
-                
+
                 // For regtest, we can mine blocks quickly with low difficulty
                 let mut block_hashes = Vec::new();
-                
+
                 for _block_index in 0..nblocks {
                     // Get current chain state
                     let chain_guard = chain.read().await;
                     let chain_tip = chain_guard.get_best_block_hash();
                     let height = chain_guard.get_best_height() + 1;
                     drop(chain_guard);
-                    
+
                     // Get transactions from mempool
                     let mempool_guard = mempool.read().await;
                     // Get mining transactions with block weight limit (4MB in weight units)
                     let max_block_weight = 4_000_000u64;
                     let reserved_coinbase_weight = 1000u64; // Reserve space for coinbase
                     let available_weight = max_block_weight - reserved_coinbase_weight;
-                    
+
                     let mining_txs = match mempool_guard.get_mining_transactions(available_weight).await {
                         Ok(txs) => txs,
                         Err(e) => {
@@ -1443,15 +1454,15 @@ impl SimpleRpcServer {
                             vec![]
                         }
                     };
-                    
+
                     // Convert MiningTransaction to Transaction
                     let transactions: Vec<Transaction> = mining_txs.iter()
                         .map(|mt| mt.tx.clone())
                         .collect();
-                    
+
                     debug!("Selected {} transactions from mempool for block", transactions.len());
                     drop(mempool_guard);
-                    
+
                     // Create block template
                     let miner_guard = miner.read().await;
                     let template = match miner_guard.create_block_template(
@@ -1465,14 +1476,14 @@ impl SimpleRpcServer {
                         }
                     };
                     drop(miner_guard);
-                    
+
                     // Create coinbase transaction
                     let block_reward = 50_00000000u64 >> (height / 210000); // Bitcoin halving schedule
-                    
+
                     // Create coinbase script with proper BIP34 height encoding
                     // BIP34 requires the height to be encoded as a script number (little-endian)
                     let mut coinbase_script = bitcoin::ScriptBuf::new();
-                    
+
                     // Encode height properly as required by BIP34
                     let height_bytes = height.to_le_bytes();
                     let height_len = if height < 256 {
@@ -1484,7 +1495,7 @@ impl SimpleRpcServer {
                     } else {
                         4
                     };
-                    
+
                     // Push the height bytes with proper length prefix
                     use bitcoin::script::PushBytesBuf;
                     let height_push = match height_len {
@@ -1493,14 +1504,14 @@ impl SimpleRpcServer {
                         3 => PushBytesBuf::try_from(height_bytes[..3].to_vec()),
                         _ => PushBytesBuf::try_from(height_bytes.to_vec()),
                     }.expect("Valid push bytes");
-                    
+
                     coinbase_script.push_slice(height_push);
-                    
+
                     // Add arbitrary data
                     let extra_data = PushBytesBuf::try_from(b"mined by rust-bitcoin-core".to_vec())
                         .expect("Valid push bytes");
                     coinbase_script.push_slice(extra_data);
-                    
+
                     let coinbase_tx = Transaction {
                         version: bitcoin::transaction::Version::non_standard(1),
                         lock_time: bitcoin::locktime::absolute::LockTime::from_consensus(0),
@@ -1515,28 +1526,28 @@ impl SimpleRpcServer {
                             script_pubkey: address.script_pubkey(),
                         }],
                     };
-                    
+
                     // Calculate merkle root from the coinbase transaction
                     // Calculate merkle root for all transactions
                     let mut tx_hashes = vec![coinbase_tx.compute_txid()];
                     for tx in &transactions {
                         tx_hashes.push(tx.compute_txid());
                     }
-                    
+
                     // Calculate proper merkle root using the merkle module
                     let merkle_root = bitcoin_core_lib::merkle::calculate_merkle_root_from_txids(&tx_hashes);
-                    
+
                     // Mine the block (for regtest, this should be very fast)
                     // TODO: Actually mine the block with PoW if needed
                     // For now, create a simple block with minimal PoW
-                    
+
                     // Ensure timestamp is increasing (add small increment for each block)
                     let block_time = template.cur_time + _block_index;
-                    
+
                     // Build the block with all transactions (coinbase + mempool)
                     let mut block_txdata = vec![coinbase_tx];
                     block_txdata.extend(transactions.clone());
-                    
+
                     // Mine the block with minimal PoW for regtest
                     let mut block = Block {
                         header: BlockHeader {
@@ -1549,17 +1560,17 @@ impl SimpleRpcServer {
                         },
                         txdata: block_txdata,
                     };
-                    
+
                     // For regtest, just set nonce to 1 - PoW validation should be minimal
                     block.header.nonce = 1;
-                    
+
                     // Add block to chain
                     let chain_guard = chain.read().await;
                     match chain_guard.process_block(block.clone()).await {
                         Ok(_) => {
                             info!("Generated block at height {}: {}", height, block.block_hash());
                             block_hashes.push(block.block_hash().to_string());
-                            
+
                             // Remove mined transactions from mempool
                             drop(chain_guard); // Release chain lock before acquiring mempool lock
                             let mut mempool_guard = mempool.write().await;
@@ -1568,7 +1579,7 @@ impl SimpleRpcServer {
                             }
                             drop(mempool_guard);
                             debug!("Removed {} transactions from mempool", block.txdata.len() - 1); // -1 for coinbase
-                            
+
                             // Broadcast block to network
                             let network_guard = network.lock().await;
                             if let Err(e) = network_guard.broadcast_block(block.clone()).await {
@@ -1576,7 +1587,7 @@ impl SimpleRpcServer {
                             } else {
                                 info!("Broadcasted block {} to network", block.block_hash());
                             }
-                            
+
                             // Update wallet balance if wallet is available
                             if let Some(wallet_ref) = &wallet {
                                 let mut wallet_guard = wallet_ref.write().await;
@@ -1593,7 +1604,7 @@ impl SimpleRpcServer {
                         }
                     }
                 }
-                
+
                 RpcResult::Ok(json!(block_hashes))
             }
         })?;
@@ -1795,38 +1806,38 @@ impl SimpleRpcServer {
                     if params.is_empty() {
                         return RpcResult::Ok(json!({"error": "Missing raw transaction hex"}));
                     }
-                    
+
                     let tx_hex = params[0].as_str().unwrap_or("");
-                    
+
                     // Decode the raw transaction
                     let tx_bytes = match hex::decode(tx_hex) {
                         Ok(bytes) => bytes,
                         Err(e) => return RpcResult::Ok(json!({"error": format!("Invalid hex: {}", e)})),
                     };
-                    
+
                     let mut tx: Transaction = match bitcoin::consensus::deserialize(&tx_bytes) {
                         Ok(tx) => tx,
                         Err(e) => return RpcResult::Ok(json!({"error": format!("Invalid transaction: {}", e)})),
                     };
-                    
+
                     // Get wallet guard
                     let wallet_guard = wallet.read().await;
-                    
+
                     // Check if wallet is locked
                     if wallet_guard.is_locked() {
                         return RpcResult::Ok(json!({"error": "Wallet is locked"}));
                     }
-                    
+
                     // Get wallet's UTXOs
                     let utxos = wallet_guard.list_unspent();
-                    
+
                     // Calculate required amount
                     let output_amount: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
-                    
+
                     // Select UTXOs to fund transaction
                     let mut selected_amount = 0u64;
                     let mut selected_utxos = Vec::new();
-                    
+
                     for utxo in utxos {
                         if selected_amount >= output_amount + 10000 { // Add 10k sats for fees
                             break;
@@ -1834,11 +1845,11 @@ impl SimpleRpcServer {
                         selected_amount += utxo.output.value.to_sat();
                         selected_utxos.push(utxo);
                     }
-                    
+
                     if selected_amount < output_amount {
                         return RpcResult::Ok(json!({"error": "Insufficient funds"}));
                     }
-                    
+
                     // Add inputs from selected UTXOs
                     for utxo in selected_utxos {
                         tx.input.push(bitcoin::TxIn {
@@ -1848,11 +1859,11 @@ impl SimpleRpcServer {
                             witness: bitcoin::Witness::new(),
                         });
                     }
-                    
+
                     // Add change output if needed
                     let fee = 10000u64; // Fixed fee for now
                     let change_amount = selected_amount - output_amount - fee;
-                    
+
                     if change_amount > 546 { // Dust threshold
                         // Get change address
                         let wallet_guard_mut = wallet.write().await;
@@ -1861,15 +1872,15 @@ impl SimpleRpcServer {
                             Err(e) => return RpcResult::Ok(json!({"error": format!("Failed to get change address: {}", e)})),
                         };
                         drop(wallet_guard_mut);
-                        
+
                         tx.output.push(bitcoin::TxOut {
                             value: bitcoin::Amount::from_sat(change_amount),
                             script_pubkey: change_address.script_pubkey(),
                         });
                     }
-                    
+
                     let funded_hex = hex::encode(bitcoin::consensus::serialize(&tx));
-                    
+
                     RpcResult::Ok(json!({
                         "hex": funded_hex,
                         "fee": fee as f64 / 100_000_000.0,

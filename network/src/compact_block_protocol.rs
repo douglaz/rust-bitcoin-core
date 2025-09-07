@@ -216,7 +216,7 @@ impl CompactBlockProtocol {
             let mut states = self.peer_states.write().await;
             if let Some(state) = states.get_mut(peer_id) {
                 state.last_compact_block = Some(Instant::now());
-                
+
                 // Check if we need to request missing transactions
                 let missing_indexes = self.get_missing_indexes(&compact_block);
                 if !missing_indexes.is_empty() {
@@ -292,7 +292,7 @@ impl CompactBlockProtocol {
         // 1. Fetch the block from storage using get_block_txn.block_hash
         // 2. Extract the requested transactions by index
         // 3. Create and return a BlockTxn message
-        
+
         // For now, return None as block storage integration is pending
         // This would be implemented when the storage layer is fully connected
         warn!(
@@ -427,7 +427,10 @@ impl CompactBlockProtocol {
     }
 
     /// Process a compact block and try to reconstruct full block
-    pub async fn process_compact_block(&self, compact_block: CompactBlock) -> Result<Option<Block>> {
+    pub async fn process_compact_block(
+        &self,
+        compact_block: CompactBlock,
+    ) -> Result<Option<Block>> {
         // Try to reconstruct the block from the compact block
         match self.relay.reconstruct_block(compact_block.clone()).await {
             Ok(block) => Ok(Some(block)),
@@ -437,27 +440,28 @@ impl CompactBlockProtocol {
             }
         }
     }
-    
+
     /// Get indexes of missing transactions for a compact block
     pub fn get_missing_indexes(&self, compact_block: &CompactBlock) -> Vec<u16> {
         // Check which transactions are missing from our mempool
         let mut missing_indexes = Vec::new();
-        
+
         // We need to check each short ID against our mempool
         // For now, we'll return indexes for transactions we don't have
         // In a real implementation, this would check against the actual mempool
-        
+
         for (index, _short_id) in compact_block.short_ids.iter().enumerate() {
             // For testing/development, assume we're missing some transactions
             // This would normally check if we have the transaction matching the short ID
-            if index % 3 == 0 {  // Simulate missing every 3rd transaction for testing
+            if index % 3 == 0 {
+                // Simulate missing every 3rd transaction for testing
                 missing_indexes.push(index as u16);
             }
         }
-        
+
         missing_indexes
     }
-    
+
     /// Add received transactions to pending compact block
     pub async fn add_transactions(
         &self,
@@ -466,62 +470,67 @@ impl CompactBlockProtocol {
     ) -> Result<Option<Block>> {
         // Try to complete the block reconstruction with received transactions
         let mut states = self.peer_states.write().await;
-        
+
         // Find the peer that has this pending block
         for (_peer_id, state) in states.iter_mut() {
             if let Some(pending) = state.pending_blocks.get_mut(&block_hash) {
                 // Add the transactions to the pending block
                 pending.missing_transactions.extend(transactions.clone());
-                
+
                 // Check if we now have all transactions
-                if pending.missing_indexes.is_empty() || 
-                   pending.missing_transactions.len() >= pending.missing_indexes.len() {
+                if pending.missing_indexes.is_empty()
+                    || pending.missing_transactions.len() >= pending.missing_indexes.len()
+                {
                     // Try to reconstruct the full block
                     // The coinbase is always the first prefilled transaction
-                    let coinbase = pending.compact_block.prefilled_txs
+                    let coinbase = pending
+                        .compact_block
+                        .prefilled_txs
                         .first()
                         .ok_or_else(|| anyhow::anyhow!("No coinbase in compact block"))?
-                        .tx.clone();
+                        .tx
+                        .clone();
                     let mut txdata = vec![coinbase];
-                    
+
                     // Add the prefilled transactions and missing transactions in order
                     let mut missing_tx_iter = pending.missing_transactions.iter();
                     let mut prefilled_iter = pending.compact_block.prefilled_txs.iter();
                     let mut next_prefilled = prefilled_iter.next();
-                    
+
                     for i in 0..pending.compact_block.short_ids.len() {
                         // Check if this index has a prefilled transaction
                         if let Some(prefilled) = next_prefilled {
-                            if prefilled.index as usize == i + 1 { // +1 because coinbase is at index 0
+                            if prefilled.index as usize == i + 1 {
+                                // +1 because coinbase is at index 0
                                 txdata.push(prefilled.tx.clone());
                                 next_prefilled = prefilled_iter.next();
                                 continue;
                             }
                         }
-                        
+
                         // Otherwise use a missing transaction
                         if let Some(tx) = missing_tx_iter.next() {
                             txdata.push(tx.clone());
                         }
                     }
-                    
+
                     // Create the complete block
                     let block = Block {
                         header: pending.compact_block.header.header.clone(),
                         txdata,
                     };
-                    
+
                     // Remove from pending
                     state.pending_blocks.remove(&block_hash);
-                    
+
                     return Ok(Some(block));
                 }
             }
         }
-        
+
         Ok(None)
     }
-    
+
     /// Periodic cleanup of stale pending blocks
     pub async fn cleanup_stale_pending(&self) {
         let mut states = self.peer_states.write().await;
@@ -535,7 +544,7 @@ impl CompactBlockProtocol {
                     blocks_to_remove.push(*block_hash);
                 }
             }
-            
+
             if !blocks_to_remove.is_empty() {
                 warn!(
                     "Clearing {} stale pending blocks for peer {}",
@@ -544,7 +553,7 @@ impl CompactBlockProtocol {
                 );
                 for block_hash in blocks_to_remove {
                     state.pending_blocks.remove(&block_hash);
-                    }
+                }
             }
         }
 
@@ -559,13 +568,13 @@ impl CompactBlockProtocol {
     fn encode_sendcmpct(&self, sendcmpct: SendCmpct) -> bitcoin::p2p::message::NetworkMessage {
         // Encode SendCmpct message using proper Bitcoin P2P encoding
         let mut payload = Vec::new();
-        
+
         // Encode high_bandwidth as single byte (0 or 1)
         payload.push(if sendcmpct.high_bandwidth { 1u8 } else { 0u8 });
-        
+
         // Encode version as 8 bytes little-endian
         payload.extend_from_slice(&sendcmpct.version.to_le_bytes());
-        
+
         bitcoin::p2p::message::NetworkMessage::Unknown {
             command: bitcoin::p2p::message::CommandString::try_from("sendcmpct").unwrap(),
             payload,
@@ -575,35 +584,35 @@ impl CompactBlockProtocol {
     fn encode_cmpctblock(&self, compact: CompactBlock) -> bitcoin::p2p::message::NetworkMessage {
         // Encode CompactBlock message using proper Bitcoin P2P encoding
         let mut payload = Vec::new();
-        
+
         // Encode block header (80 bytes)
         let header_bytes = bitcoin::consensus::serialize(&compact.header.header);
         payload.extend_from_slice(&header_bytes);
-        
+
         // Encode nonce (8 bytes little-endian)
         payload.extend_from_slice(&compact.header.nonce.to_le_bytes());
-        
+
         // Encode short_ids count as compact size
         self.encode_compact_size(compact.short_ids.len(), &mut payload);
-        
+
         // Encode each short ID (6 bytes each)
         for short_id in &compact.short_ids {
             payload.extend_from_slice(short_id.as_bytes());
         }
-        
+
         // Encode prefilled_txs count as compact size
         self.encode_compact_size(compact.prefilled_txs.len(), &mut payload);
-        
+
         // Encode each prefilled transaction
         for prefilled in &compact.prefilled_txs {
             // Encode index as compact size
             self.encode_compact_size(prefilled.index as usize, &mut payload);
-            
+
             // Encode transaction
             let tx_bytes = bitcoin::consensus::serialize(&prefilled.tx);
             payload.extend_from_slice(&tx_bytes);
         }
-        
+
         bitcoin::p2p::message::NetworkMessage::Unknown {
             command: bitcoin::p2p::message::CommandString::try_from("cmpctblock").unwrap(),
             payload,
@@ -616,25 +625,25 @@ impl CompactBlockProtocol {
     ) -> bitcoin::p2p::message::NetworkMessage {
         // Encode GetBlockTxn message using proper Bitcoin P2P encoding
         let mut payload = Vec::new();
-        
+
         // Encode block hash (32 bytes)
         let hash_bytes = bitcoin::consensus::serialize(&get_block_txn.block_hash);
         payload.extend_from_slice(&hash_bytes);
-        
+
         // Encode indexes count as compact size
         self.encode_compact_size(get_block_txn.indexes.len(), &mut payload);
-        
+
         // Encode each index as compact size
         for index in &get_block_txn.indexes {
             self.encode_compact_size(*index as usize, &mut payload);
         }
-        
+
         bitcoin::p2p::message::NetworkMessage::Unknown {
             command: bitcoin::p2p::message::CommandString::try_from("getblocktxn").unwrap(),
             payload,
         }
     }
-    
+
     /// Helper to encode compact size (variable length integer)
     fn encode_compact_size(&self, value: usize, buffer: &mut Vec<u8>) {
         if value < 0xFD {

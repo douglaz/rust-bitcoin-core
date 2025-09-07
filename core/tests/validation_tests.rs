@@ -18,12 +18,11 @@ use storage::utxo::UtxoSet;
 /// Create a test block with specified transactions
 fn create_test_block(txs: Vec<Transaction>) -> Block {
     // Calculate the correct merkle root from transactions
-    let merkle_root = bitcoin::merkle_tree::calculate_root(
-        txs.iter().map(|tx| tx.compute_txid().to_raw_hash()),
-    )
-    .map(|root| bitcoin::TxMerkleNode::from_raw_hash(root))
-    .unwrap_or_else(|| bitcoin::TxMerkleNode::from_byte_array([0u8; 32]));
-    
+    let merkle_root =
+        bitcoin::merkle_tree::calculate_root(txs.iter().map(|tx| tx.compute_txid().to_raw_hash()))
+            .map(|root| bitcoin::TxMerkleNode::from_raw_hash(root))
+            .unwrap_or_else(|| bitcoin::TxMerkleNode::from_byte_array([0u8; 32]));
+
     Block {
         header: BlockHeader {
             version: BlockVersion::from_consensus(4),
@@ -40,7 +39,7 @@ fn create_test_block(txs: Vec<Transaction>) -> Block {
 /// Create a coinbase transaction
 fn create_coinbase(height: u32, value: u64) -> Transaction {
     let mut coinbase_script = Vec::new();
-    
+
     // Encode height in script (BIP34) - use minimal encoding
     if height == 0 {
         coinbase_script.push(0x00); // OP_0/OP_FALSE

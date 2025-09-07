@@ -117,7 +117,7 @@ pub struct MempoolAcceptance {
 
     /// Statistics
     stats: Arc<RwLock<MempoolStats>>,
-    
+
     /// RBF policy (optional)
     rbf_policy: Option<Arc<crate::rbf::RBFPolicy>>,
 }

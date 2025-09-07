@@ -27,15 +27,15 @@ use tracing::debug;
 /// Count signature operations in a script
 pub fn count_sigops(script: &Script, accurate: bool) -> usize {
     use bitcoin::blockdata::opcodes::all::*;
-    
+
     let mut sigops = 0;
     let mut pc = 0;
     let script_bytes = script.as_bytes();
-    
+
     while pc < script_bytes.len() {
         let opcode = script_bytes[pc];
         pc += 1;
-        
+
         // Handle push operations
         if opcode <= OP_PUSHDATA4.to_u8() {
             let push_len = if opcode < OP_PUSHDATA1.to_u8() {
@@ -60,7 +60,7 @@ pub fn count_sigops(script: &Script, accurate: bool) -> usize {
             } else {
                 break;
             };
-            
+
             // Skip the pushed data
             pc = pc.saturating_add(push_len);
             if pc > script_bytes.len() {
@@ -82,18 +82,22 @@ pub fn count_sigops(script: &Script, accurate: bool) -> usize {
             }
         }
     }
-    
+
     sigops
 }
 
 /// Count signature operations in a transaction
-pub fn count_transaction_sigops(tx: &Transaction, utxo_scripts: &[bitcoin::ScriptBuf], flags: ScriptFlags) -> usize {
+pub fn count_transaction_sigops(
+    tx: &Transaction,
+    utxo_scripts: &[bitcoin::ScriptBuf],
+    flags: ScriptFlags,
+) -> usize {
     let mut total_sigops = 0;
-    
+
     for (index, input) in tx.input.iter().enumerate() {
         // Count sigops in input script
         total_sigops += count_sigops(&input.script_sig, false);
-        
+
         // For P2SH, count sigops in the redeemed script
         if flags.contains(ScriptFlags::P2SH) && index < utxo_scripts.len() {
             let prev_script = &utxo_scripts[index];
@@ -105,20 +109,21 @@ pub fn count_transaction_sigops(tx: &Transaction, utxo_scripts: &[bitcoin::Scrip
             }
         }
     }
-    
+
     // Count witness sigops for SegWit transactions
     if flags.contains(ScriptFlags::WITNESS) {
         for (index, input) in tx.input.iter().enumerate() {
             if !input.witness.is_empty() && index < utxo_scripts.len() {
                 let prev_script = &utxo_scripts[index];
-                
+
                 // Check for witness programs
                 if prev_script.is_p2wpkh() {
                     total_sigops += 1; // P2WPKH always has 1 sigop
                 } else if prev_script.is_p2wsh() {
                     // P2WSH: count sigops in witness script (last item)
                     if let Some(witness_script_bytes) = input.witness.last() {
-                        let witness_script = bitcoin::ScriptBuf::from(witness_script_bytes.to_vec());
+                        let witness_script =
+                            bitcoin::ScriptBuf::from(witness_script_bytes.to_vec());
                         total_sigops += count_sigops(&witness_script, true);
                     }
                 } else if prev_script.is_p2sh() && !input.witness.is_empty() {
@@ -128,7 +133,8 @@ pub fn count_transaction_sigops(tx: &Transaction, utxo_scripts: &[bitcoin::Scrip
                             total_sigops += 1;
                         } else if redeem_script.is_p2wsh() {
                             if let Some(witness_script_bytes) = input.witness.last() {
-                                let witness_script = bitcoin::ScriptBuf::from(witness_script_bytes.to_vec());
+                                let witness_script =
+                                    bitcoin::ScriptBuf::from(witness_script_bytes.to_vec());
                                 total_sigops += count_sigops(&witness_script, true);
                             }
                         }
@@ -137,7 +143,7 @@ pub fn count_transaction_sigops(tx: &Transaction, utxo_scripts: &[bitcoin::Scrip
             }
         }
     }
-    
+
     total_sigops
 }
 
@@ -147,35 +153,45 @@ fn extract_p2sh_redeem_script(script_sig: &bitcoin::Script) -> Option<bitcoin::S
     if bytes.is_empty() {
         return None;
     }
-    
+
     // Find the last push operation
     let mut last_push_start = None;
     let mut last_push_len = 0;
     let mut pc = 0;
-    
+
     while pc < bytes.len() {
         let opcode = bytes[pc];
         pc += 1;
-        
+
         if opcode <= bitcoin::blockdata::opcodes::all::OP_PUSHDATA4.to_u8() {
-            let (push_start, push_len) = if opcode < bitcoin::blockdata::opcodes::all::OP_PUSHDATA1.to_u8() {
+            let (push_start, push_len) = if opcode
+                < bitcoin::blockdata::opcodes::all::OP_PUSHDATA1.to_u8()
+            {
                 (pc, opcode as usize)
-            } else if opcode == bitcoin::blockdata::opcodes::all::OP_PUSHDATA1.to_u8() && pc < bytes.len() {
+            } else if opcode == bitcoin::blockdata::opcodes::all::OP_PUSHDATA1.to_u8()
+                && pc < bytes.len()
+            {
                 let len = bytes[pc] as usize;
                 pc += 1;
                 (pc, len)
-            } else if opcode == bitcoin::blockdata::opcodes::all::OP_PUSHDATA2.to_u8() && pc + 1 < bytes.len() {
+            } else if opcode == bitcoin::blockdata::opcodes::all::OP_PUSHDATA2.to_u8()
+                && pc + 1 < bytes.len()
+            {
                 let len = u16::from_le_bytes([bytes[pc], bytes[pc + 1]]) as usize;
                 pc += 2;
                 (pc, len)
-            } else if opcode == bitcoin::blockdata::opcodes::all::OP_PUSHDATA4.to_u8() && pc + 3 < bytes.len() {
-                let len = u32::from_le_bytes([bytes[pc], bytes[pc + 1], bytes[pc + 2], bytes[pc + 3]]) as usize;
+            } else if opcode == bitcoin::blockdata::opcodes::all::OP_PUSHDATA4.to_u8()
+                && pc + 3 < bytes.len()
+            {
+                let len =
+                    u32::from_le_bytes([bytes[pc], bytes[pc + 1], bytes[pc + 2], bytes[pc + 3]])
+                        as usize;
                 pc += 4;
                 (pc, len)
             } else {
                 break;
             };
-            
+
             if pc + push_len <= bytes.len() {
                 last_push_start = Some(push_start);
                 last_push_len = push_len;
@@ -185,7 +201,7 @@ fn extract_p2sh_redeem_script(script_sig: &bitcoin::Script) -> Option<bitcoin::S
             }
         }
     }
-    
+
     // Extract the last pushed data as the redeem script
     if let Some(start) = last_push_start {
         if start + last_push_len <= bytes.len() {
@@ -193,7 +209,7 @@ fn extract_p2sh_redeem_script(script_sig: &bitcoin::Script) -> Option<bitcoin::S
             return Some(bitcoin::ScriptBuf::from(script_bytes.to_vec()));
         }
     }
-    
+
     None
 }
 
@@ -323,14 +339,14 @@ pub fn verify_witness_program(
         // Verify the witness program is a valid X-only public key
         let _output_key = bitcoin::XOnlyPublicKey::from_slice(witness_program)
             .map_err(|_| ScriptError::InvalidTaprootKey)?;
-        
+
         // Basic taproot validation - check witness stack structure
         if witness.is_empty() {
             return Err(ScriptError::WitnessProgramEmpty);
         }
-        
+
         let stack_len = witness.len();
-        
+
         // Key path spend: 1 or 2 elements (signature + optional annex)
         // Script path spend: at least 2 elements (script inputs + script + control block + optional annex)
         if stack_len == 1 {
@@ -342,7 +358,7 @@ pub fn verify_witness_program(
         } else if stack_len >= 2 {
             // Could be key path with annex or script path spend
             let last = witness.last().unwrap();
-            
+
             // Check if last element might be an annex (starts with 0x50)
             if last.starts_with(&[0x50]) && stack_len == 2 {
                 // Key path with annex
@@ -356,11 +372,11 @@ pub fn verify_witness_program(
                 if control_block.len() < 33 {
                     return Err(ScriptError::TaprootValidation);
                 }
-                
+
                 // First byte of control block contains leaf version and parity bit
                 let first_byte = control_block[0];
                 let _leaf_version = first_byte & 0xFE;
-                
+
                 // Rest should be internal key (32 bytes) and optional merkle path
                 let remaining = control_block.len() - 1;
                 if remaining < 32 || (remaining - 32) % 32 != 0 {
@@ -368,11 +384,11 @@ pub fn verify_witness_program(
                 }
             }
         }
-        
+
         // TODO: Full taproot validation would require access to transaction context
         // For now, we accept structurally valid taproot witnesses
         debug!("Taproot witness validation passed (basic checks)");
-        
+
         return Ok(());
     } else {
         // Unknown witness version
