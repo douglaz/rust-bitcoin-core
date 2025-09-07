@@ -284,7 +284,7 @@ fn verify_p2wsh_witness(
     );
 
     // Prepare witness stack (all items except the last one which is the script)
-    let mut witness_stack = Vec::new();
+    let mut witness_stack = Vec::with_capacity(witness.len().saturating_sub(1));
     for i in 0..witness.len() - 1 {
         witness_stack.push(witness[i].to_vec());
     }
@@ -465,9 +465,10 @@ mod tests {
             ));
 
             // Witness contains: value "1", then the script
-            let mut witness_data = vec![];
-            witness_data.push(vec![1u8]); // Push value 1 onto stack
-            witness_data.push(witness_script.as_bytes().to_vec());
+            let witness_data = vec![
+                vec![1u8], // Push value 1 onto stack
+                witness_script.as_bytes().to_vec(),
+            ];
             let witness = bitcoin::Witness::from_slice(&witness_data);
 
             let result =
