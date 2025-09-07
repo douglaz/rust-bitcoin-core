@@ -258,11 +258,27 @@ fn verify_p2wsh_witness(
         return Ok(false);
     }
 
-    // Execute witness script with remaining witness stack items
-    // This would involve full script execution - simplified here
-    trace!("P2WSH script execution would happen here");
+    // Create signature hash for witness script execution
+    let mut cache = bitcoin::sighash::SighashCache::new(tx);
+    let sighash = cache.segwit_signature_hash(
+        input_index,
+        &witness_script,
+        value,
+        bitcoin::sighash::EcdsaSighashType::All,
+    )?;
+    
+    // Validate that we're using the correct input
+    if input_index >= tx.input.len() {
+        bail!("Invalid input index {} for transaction with {} inputs", 
+              input_index, tx.input.len());
+    }
+    
+    trace!("P2WSH validation for tx input {} with value {} sats, sighash: {}",
+          input_index, value.to_sat(), sighash);
 
-    // For now, return true if structure is valid
+    // For full validation, we would execute the witness script here
+    // with the witness stack items. For now, return true if hash matches
+    // and basic validation passes.
     Ok(true)
 }
 
@@ -365,5 +381,63 @@ mod tests {
         let p2wsh = ScriptBuf::new_p2wsh(&bitcoin::WScriptHash::all_zeros());
         assert!(!p2wsh.is_p2wpkh());
         assert!(p2wsh.is_p2wsh());
+    }
+
+    #[test]
+    fn test_p2wsh_witness_verification() -> Result<()> {
+        use bitcoin::hashes::Hash;
+        
+        // Create a test transaction
+        let tx = Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::locktime::absolute::LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint::default(),
+                script_sig: ScriptBuf::new(),
+                sequence: bitcoin::Sequence::MAX,
+                witness: bitcoin::Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(1000),
+                script_pubkey: ScriptBuf::new(),
+            }],
+        };
+
+        // Create a witness script
+        let witness_script = ScriptBuf::from_bytes(vec![0x51]); // OP_1
+        let script_hash = bitcoin::hashes::sha256::Hash::hash(witness_script.as_bytes());
+        
+        // Create P2WSH script pubkey
+        let script_pubkey = ScriptBuf::new_p2wsh(&bitcoin::WScriptHash::from_byte_array(
+            script_hash.to_byte_array()
+        ));
+
+        // Create witness with the script
+        let witness = bitcoin::Witness::from_slice(&[witness_script.as_bytes()]);
+        
+        // Verify witness
+        let result = verify_p2wsh_witness(
+            &tx,
+            0,
+            &script_pubkey,
+            Amount::from_sat(1000),
+            &witness,
+        )?;
+        
+        assert!(result, "P2WSH witness verification should succeed");
+        
+        // Test with invalid script hash
+        let wrong_script = ScriptBuf::new_p2wsh(&bitcoin::WScriptHash::all_zeros());
+        let result = verify_p2wsh_witness(
+            &tx,
+            0,
+            &wrong_script,
+            Amount::from_sat(1000),
+            &witness,
+        )?;
+        
+        assert!(!result, "P2WSH witness verification should fail with wrong script hash");
+        
+        Ok(())
     }
 }
