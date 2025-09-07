@@ -136,7 +136,10 @@ impl ScriptInterpreter {
 
         // For clean stack flag, ensure only one element remains
         if self.flags.verify_cleanstack && self.stack.len() != 1 {
-            trace!("Witness script execution failed: stack not clean (len={})", self.stack.len());
+            trace!(
+                "Witness script execution failed: stack not clean (len={})",
+                self.stack.len()
+            );
             return Ok(false);
         }
 

@@ -269,7 +269,7 @@ mod tests {
         // Create some test files with known sizes
         fs::write(temp_path.join("block_001.dat"), vec![0u8; 1024])?;
         fs::write(temp_path.join("block_002.dat"), vec![0u8; 2048])?;
-        
+
         // Create a subdirectory with more files
         let sub_dir = temp_path.join("blocks");
         fs::create_dir(&sub_dir)?;
