@@ -260,7 +260,7 @@ fn verify_p2wsh_witness(
 
     // Create signature hash for witness script execution
     let mut cache = bitcoin::sighash::SighashCache::new(tx);
-    let sighash = cache.segwit_signature_hash(
+    let sighash = cache.p2wsh_signature_hash(
         input_index,
         &witness_script,
         value,
@@ -386,6 +386,7 @@ mod tests {
     #[test]
     fn test_p2wsh_witness_verification() -> Result<()> {
         use bitcoin::hashes::Hash;
+        use bitcoin::TxIn;
         
         // Create a test transaction
         let tx = Transaction {
