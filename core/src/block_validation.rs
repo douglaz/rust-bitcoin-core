@@ -446,7 +446,7 @@ impl BlockValidationRules {
         let mut total_input = 0u64;
         for input in &tx.input {
             let prevout = &input.previous_output;
-            
+
             // Check if the UTXO exists
             match utxo_set.get(prevout) {
                 Some(prev_tx_out) => {
@@ -455,7 +455,8 @@ impl BlockValidationRules {
                 None => {
                     bail!(
                         "Transaction input references non-existent UTXO: {}:{}",
-                        prevout.txid, prevout.vout
+                        prevout.txid,
+                        prevout.vout
                     );
                 }
             }
@@ -465,7 +466,8 @@ impl BlockValidationRules {
         if total_input < total_output {
             bail!(
                 "Transaction outputs ({} sats) exceed inputs ({} sats)",
-                total_output, total_input
+                total_output,
+                total_input
             );
         }
 
