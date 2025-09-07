@@ -1,7 +1,7 @@
 # Rust build artifacts
 /target/
 **/target/
-Cargo.lock
+# Note: Cargo.lock is committed for binary projects
 
 # IDE files
 .idea/
