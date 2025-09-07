@@ -77,8 +77,6 @@ pub async fn calculate_size_on_disk(storage_path: &std::path::Path) -> Result<u6
     use futures::stream::{self, StreamExt};
     use tokio::fs;
 
-    let mut total_size = 0u64;
-
     // Walk the directory recursively
     let mut entries = fs::read_dir(storage_path)
         .await
@@ -107,7 +105,7 @@ pub async fn calculate_size_on_disk(storage_path: &std::path::Path) -> Result<u6
         .collect()
         .await;
 
-    total_size = sizes.iter().sum();
+    let total_size: u64 = sizes.iter().sum();
 
     debug!("Total blockchain size on disk: {} bytes", total_size);
     Ok(total_size)
@@ -257,5 +255,33 @@ mod tests {
             bits: bitcoin::CompactTarget::from_consensus(0x1d00ffff),
             nonce: 0,
         }
+    }
+
+    #[tokio::test]
+    async fn test_calculate_size_on_disk() -> Result<()> {
+        use std::fs;
+        use tempfile::tempdir;
+
+        // Create a temporary directory with test files
+        let temp_dir = tempdir()?;
+        let temp_path = temp_dir.path();
+
+        // Create some test files with known sizes
+        fs::write(temp_path.join("block_001.dat"), vec![0u8; 1024])?;
+        fs::write(temp_path.join("block_002.dat"), vec![0u8; 2048])?;
+
+        // Create a subdirectory with more files
+        let sub_dir = temp_path.join("blocks");
+        fs::create_dir(&sub_dir)?;
+        fs::write(sub_dir.join("block_003.dat"), vec![0u8; 512])?;
+        fs::write(sub_dir.join("block_004.dat"), vec![0u8; 256])?;
+
+        // Calculate total size
+        let total_size = calculate_size_on_disk(temp_path).await?;
+
+        // Expected: 1024 + 2048 + 512 + 256 = 3840 bytes
+        assert_eq!(total_size, 3840);
+
+        Ok(())
     }
 }

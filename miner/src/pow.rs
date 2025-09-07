@@ -91,7 +91,7 @@ impl ProofOfWorkMiner {
 
         // Divide nonce space among threads
         let nonce_range = u32::MAX / self.num_threads as u32;
-        let mut handles = Vec::new();
+        let mut handles = Vec::with_capacity(self.num_threads);
 
         for thread_id in 0..self.num_threads {
             let nonce_start = thread_id as u32 * nonce_range;

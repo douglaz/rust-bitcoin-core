@@ -102,7 +102,7 @@ impl TransactionSelector {
         // Sort by effective fee rate (including ancestors)
         eligible.sort_by(|a, b| b.effective_fee_rate().cmp(&a.effective_fee_rate()));
 
-        let mut selected = Vec::new();
+        let mut selected = Vec::with_capacity(eligible.len());
         let mut selected_txids = HashSet::new();
         let mut total_weight = self.coinbase_reserved;
         let mut total_fees = Amount::ZERO;
@@ -170,7 +170,7 @@ impl TransactionSelector {
             b_rate.cmp(&a_rate)
         });
 
-        let mut selected = Vec::new();
+        let mut selected = Vec::with_capacity(packages.len());
         let mut selected_txids = HashSet::new();
         let mut total_weight = self.coinbase_reserved;
 
@@ -288,7 +288,7 @@ impl KnapsackSelector {
         items.sort_by(|a, b| b.fee_rate.cmp(&a.fee_rate));
 
         // Simple greedy approach for now (full DP would be too expensive)
-        let mut selected = Vec::new();
+        let mut selected = Vec::with_capacity(items.len());
         let mut total_weight = 0;
 
         for item in items {

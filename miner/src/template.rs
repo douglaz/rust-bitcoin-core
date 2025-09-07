@@ -123,7 +123,7 @@ impl TransactionSelector {
         });
 
         // Select transactions greedily
-        let mut selected = Vec::new();
+        let mut selected = Vec::with_capacity(sorted_txs.len());
         let mut total_weight = Weight::from_wu(0);
         let mut total_fees = Amount::ZERO;
         let mut total_sigops = 0u32;

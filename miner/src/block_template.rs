@@ -156,7 +156,7 @@ impl BlockTemplateBuilder {
         _height: u32,
     ) -> Result<Vec<Transaction>> {
         // Calculate fee rates for all transactions
-        let mut tx_with_rates = Vec::new();
+        let mut tx_with_rates = Vec::with_capacity(transactions.len());
         for tx in transactions {
             let fee_rate = self.calculate_fee_rate(&tx).await.unwrap_or(0);
             tx_with_rates.push((tx, fee_rate));
@@ -165,7 +165,7 @@ impl BlockTemplateBuilder {
         // Sort by fee rate (descending)
         tx_with_rates.sort_by(|a, b| b.1.cmp(&a.1));
 
-        let mut selected = Vec::new();
+        let mut selected = Vec::with_capacity(tx_with_rates.len());
         let mut total_weight = self.config.coinbase_reserve as u64 * WITNESS_SCALE_FACTOR as u64;
         let mut total_size = self.config.coinbase_reserve;
 
